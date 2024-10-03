@@ -1,0 +1,19 @@
+[package]
+name = "test-contract"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+solana-program = "=1.18.23"
+solana-sdk = "=1.18.23"
+solana-client = "=1.18.23"
+spl-token = "=4.0.0"
+spl-associated-token-account = { version = "=2.3.0", features = ["no-entrypoint"] }
+borsh = "1.5.0"
+borsh-derive = "1.5.0"
+smart-contract = { path = "../smart-contract" }
+lazy_static = "1.4.0"
+
+[[bin]]
+name = "demo"
+path = "src/demo.rs"
