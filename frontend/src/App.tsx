@@ -1,35 +1,57 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import React, { useMemo } from 'react';
+import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react';
+import {
+    LedgerWalletAdapter,
+    PhantomWalletAdapter,
+    SolflareWalletAdapter,
+    TorusWalletAdapter,
+} from '@solana/wallet-adapter-wallets';
+import {
+    WalletModalProvider,
+    WalletMultiButton
+} from '@solana/wallet-adapter-react-ui';
+import SmartWalletInteractions from './components/SmartWalletInteractions';
+import './App.css';
+
+import '@solana/wallet-adapter-react-ui/styles.css';
 
 function App() {
-  const [count, setCount] = useState(0)
+    const network = 'http://127.0.0.1:8899';
+    const endpoint = useMemo(() => network, []);
 
-  return (
-    <>
-      <div>
-        <a href="https://vitejs.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+    const wallets = useMemo(
+        () => [
+            new PhantomWalletAdapter(),
+            new SolflareWalletAdapter(),
+            new TorusWalletAdapter(),
+            new LedgerWalletAdapter(),
+        ],
+        []
+    );
+
+    return (
+        <ConnectionProvider endpoint={endpoint}>
+            <WalletProvider wallets={wallets} autoConnect>
+                <WalletModalProvider>
+                    <div className="min-h-screen w-screen bg-gradient-to-br from-black to-gray-900 text-white">
+                        <nav className="bg-black bg-opacity-50 backdrop-filter backdrop-blur-lg border-b border-gray-800">
+                            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                                <div className="flex justify-between items-center h-16">
+                                    <h1 className="text-2xl font-semibold text-white">Smart Wallet</h1>
+                                    <WalletMultiButton className="bg-white text-black hover:bg-gray-200 font-medium py-2 px-4 rounded-md transition duration-300 ease-in-out transform hover:scale-105" />
+                                </div>
+                            </div>
+                        </nav>
+                        <main className="p-4 sm:p-6 md:p-8">
+                            <div className="max-w-7xl mx-auto">
+                                <SmartWalletInteractions />
+                            </div>
+                        </main>
+                    </div>
+                </WalletModalProvider>
+            </WalletProvider>
+        </ConnectionProvider>
+    );
 }
 
-export default App
+export default App;
