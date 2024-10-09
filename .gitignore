@@ -1,3 +1,13 @@
 /test-ledger/
 recipient_keypair.json
 .env
+# Node modules
+node_modules/
+
+
+# dotenv environment variables file
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+smartWalletTelBot/bot_keypair.json

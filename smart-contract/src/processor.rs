@@ -34,13 +34,6 @@ pub fn create_wallet(program_id: &Pubkey, accounts: &[AccountInfo], _instrcution
         &[&[b"wallet", user_account.key.as_ref(), &[bump_seed]]],
     )?;
 
-    // // Now initialize the data in the PDA
-    // let mut wallet_data = unpack_wallet_data(&wallet_account)?;
-    // wallet_data.owner = *user_account.key;
-    // wallet_data.transaction_count = 0;
-    // wallet_data.approved_dapps_count = 0;
-    // pack_wallet_data(&wallet_data, wallet_account)?;
-
     Ok(())
 }
 
@@ -55,10 +48,7 @@ pub fn approve_dapp(program_id: &Pubkey, accounts: &[AccountInfo], max_amount: u
     let token_mint_account = next_account_info(account_info_iter)?; // token to approve for spending 
     let approval_account = next_account_info(account_info_iter)?; // approval account i.e pda storing approval details 
     let system_program = next_account_info(account_info_iter)?; 
-    
-    // let mut wallet_data = unpack_wallet_data(wallet_account)?;
 
-    // let _ = wallet_data.verify_owner(user_account.key);
 
     let (wallet_pda, _) = Pubkey::find_program_address(&[b"wallet", user_account.key.as_ref()], program_id);
     
@@ -92,14 +82,10 @@ pub fn approve_dapp(program_id: &Pubkey, accounts: &[AccountInfo], max_amount: u
             &[&[b"approval", wallet_account.key.as_ref(), dapp_account.key.as_ref(), token_mint_account.key.as_ref(), &[bump_seed]]],
         )?;
 
-        // wallet_data.increment_approved_dapps_count();
     }
 
     let approval_data = DAppApproval::new(max_amount, expiry, *token_mint_account.key);
     pack_approval_data(&approval_data, approval_account)?;
-
-    // Update wallet data
-    // pack_wallet_data(&wallet_data, wallet_account)?;
 
     msg!("DApp approved successfully");
 
@@ -113,6 +99,9 @@ pub fn execute_transaction(
     amount: u64,
     transfer_type: TransferType,
 ) -> ProgramResult {
+    // Base transaction fee is 5000 lamports per signature
+    const TRANSACTION_FEE: u64 = 5000;
+
     msg!("execute_transaction: Beginning execution");
 
     let account_info_iter = &mut accounts.iter();
@@ -155,57 +144,49 @@ pub fn execute_transaction(
     // Unpack and verify approval data
     let approval_data = unpack_approval_data(approval_account)?;
     if !approval_data.is_approved {
+        msg!("Dapp is not approved");
         return Err(ProgramError::InvalidAccountData.into());
     }
 
     // Check approval expiry
     let clock = Clock::get()?;
     if clock.unix_timestamp >= approval_data.expiry {
+        msg!("Approval has expired");
         return Err(ProgramError::InvalidAccountData.into());
     }
 
     // Check transaction amount
     if amount > approval_data.max_amount {
+        msg!("Amount is greater than max amount");
         return Err(ProgramError::InvalidAccountData.into());
     }
 
     match transfer_type {
         TransferType::Sol => {
-            // Verify the approval is for SOL (you might want to add a field in DAppApproval for this)
+            // Verify the approval is for SOL 
             if approval_data.token_mint != Pubkey::default() {
+                msg!("Approval is not for SOL");
                 return Err(ProgramError::InvalidAccountData.into());
             }
 
             msg!("Transferring SOL from wallet {:?} to recipient {:?}, amount: {:?}", wallet_account.key, recipient_account.key, amount);
             msg!("Wallet account's balance: {:?}", wallet_account.lamports());
 
-            // Create the transfer instruction
-            let ix = solana_program::system_instruction::transfer(
-                wallet_account.key,
-                recipient_account.key,
-                amount
-            );
-
-            // Execute the transfer
-            // solana_program::program::invoke_signed(
-            //     &ix,
-            //     &[
-            //         wallet_account.clone(),
-            //         recipient_account.clone(),
-            //         system_program.clone(),
-            //     ],
-            //     &[&[b"wallet", user_account.key.as_ref(), &[bump_seed]]],
-            // )?;
-
-            // Decrease lamports from wallet account
+            // Check if wallet has enough balance for transfer and fee
             let wallet_balance = wallet_account.lamports();
-            if wallet_balance < amount {
+
+            if wallet_balance < amount + TRANSACTION_FEE {
+                msg!("Wallet does not have enough balance for transfer and fee");
                 return Err(ProgramError::InsufficientFunds.into());
             }
-            **wallet_account.try_borrow_mut_lamports()? -= amount;
 
-            // Increase lamports for recipient account
+            // Transfer amount to recipient
+            **wallet_account.try_borrow_mut_lamports()? -= amount;
             **recipient_account.try_borrow_mut_lamports()? += amount;
+
+            // Transfer fee to dApp
+            **wallet_account.try_borrow_mut_lamports()? -= TRANSACTION_FEE;
+            **dapp_account.try_borrow_mut_lamports()? += TRANSACTION_FEE;
 
             msg!("Transfer completed. New wallet balance: {}", wallet_account.lamports());
         },
@@ -245,14 +226,13 @@ pub fn execute_transaction(
                 ],
                 &[&[b"wallet", user_account.key.as_ref(), &[bump_seed]]],
             )?;
+
+            // Transfer SOL fee to dApp
+            **wallet_account.try_borrow_mut_lamports()? -= TRANSACTION_FEE;
+            **dapp_account.try_borrow_mut_lamports()? += TRANSACTION_FEE;
         }
     }
-
-    // // Update approval data
-    // approval_data.max_amount = approval_data.max_amount.saturating_sub(amount);
-    // pack_approval_data(&approval_data, approval_account)?;
 
     msg!("Transaction executed successfully");
     Ok(())
 }
-
