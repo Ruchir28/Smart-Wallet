@@ -1,5 +1,6 @@
-import { serialize, deserialize } from "borsh";
+import { serialize } from "borsh";
 import { Buffer } from "buffer";
+import { PublicKey } from "@solana/web3.js";
 
 // Define the transfer types
 export enum TransferType {
@@ -22,8 +23,7 @@ class CreateWalletInstruction {
 class ApproveDappInstruction {
     maxAmount: bigint;
     expiry: number;
-
-    constructor(properties: { maxAmount: bigint; expiry: number }) {
+    constructor(properties: { maxAmount: bigint; expiry: number; }) {
         this.maxAmount = properties.maxAmount;
         this.expiry = properties.expiry;
     }
@@ -39,12 +39,9 @@ class ExecuteTransactionInstruction {
     }
 }
 
-// Borsh schema for serialization
-// Updated Borsh schema for serialization
-// Borsh schema for serialization
 const InstructionSchema = {
   CreateWalletInstruction: { struct: {} },
-  ApproveDappInstruction: { struct: { maxAmount: 'u64', expiry: 'i64' } },
+  ApproveDappInstruction: { struct: { maxAmount: 'u64', expiry: 'i64'} },
   ExecuteTransactionInstruction: { struct: { amount: 'u64', transferType: 'u8' } },
 };
 
@@ -95,26 +92,3 @@ export function serializeWalletInstruction(instruction: WalletInstruction): Uint
     // Concatenate the type and serialized data
     return Buffer.concat([buffer, serializedData]);
 }
-
-// Deserialization method using Borsh
-// export function deserializeWalletInstruction(data: Uint8Array): WalletInstruction {
-//     const type = data[0] as WalletInstructionType;
-//     const buffer = Buffer.from(data.slice(1));
-
-//     switch (type) {
-//         case WalletInstructionType.CreateWallet:
-//             return { type, data: new CreateWalletInstruction() };
-//         case WalletInstructionType.ApproveDapp:
-//             return {
-//                 type,
-//                 data: deserialize(InstructionSchema, ApproveDappInstruction, buffer) as ApproveDappInstruction,
-//             };
-//         case WalletInstructionType.ExecuteTransaction:
-//             return {
-//                 type,
-//                 data: deserialize(InstructionSchema, ExecuteTransactionInstruction, buffer) as ExecuteTransactionInstruction,
-//             };
-//         default:
-//             throw new Error('Invalid instruction type');
-//     }
-// }

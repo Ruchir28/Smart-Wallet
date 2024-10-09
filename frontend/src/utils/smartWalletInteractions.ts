@@ -58,6 +58,7 @@ export async function depositToken(
     programId: PublicKey,
     walletPublicKey: PublicKey,
     tokenMint: PublicKey,
+    userATA: PublicKey,
     amount: number
 ): Promise<string> {
     const [walletAddress] = PublicKey.findProgramAddressSync(
@@ -65,16 +66,15 @@ export async function depositToken(
         programId
     );
 
-    const fromTokenAccount = await connection.getTokenAccountsByOwner(walletPublicKey, { mint: tokenMint });
     const toTokenAccount = await connection.getTokenAccountsByOwner(walletAddress, { mint: tokenMint });
 
-    if (fromTokenAccount.value.length === 0 || toTokenAccount.value.length === 0) {
-        throw new Error("Token accounts not found");
+    if (toTokenAccount.value.length === 0) {
+        throw new Error("Token account not found in smart wallet");
     }
 
     const transaction = new Transaction().add(
         createTransferInstruction(
-            fromTokenAccount.value[0].pubkey,
+            userATA,
             toTokenAccount.value[0].pubkey,
             walletPublicKey,
             amount * Math.pow(10, 9) // Assuming 9 decimals, adjust if needed
@@ -93,6 +93,7 @@ export async function withdrawToken(
     programId: PublicKey,
     walletPublicKey: PublicKey,
     tokenMint: PublicKey,
+    userATA: PublicKey,
     amount: number
 ): Promise<string> {
     const [walletAddress] = PublicKey.findProgramAddressSync(
@@ -101,16 +102,15 @@ export async function withdrawToken(
     );
 
     const fromTokenAccount = await connection.getTokenAccountsByOwner(walletAddress, { mint: tokenMint });
-    const toTokenAccount = await connection.getTokenAccountsByOwner(walletPublicKey, { mint: tokenMint });
 
-    if (fromTokenAccount.value.length === 0 || toTokenAccount.value.length === 0) {
-        throw new Error("Token accounts not found");
+    if (fromTokenAccount.value.length === 0) {
+        throw new Error("Token account not found in smart wallet");
     }
 
     const transaction = new Transaction().add(
         createTransferInstruction(
             fromTokenAccount.value[0].pubkey,
-            toTokenAccount.value[0].pubkey,
+            userATA,
             walletAddress,
             amount * Math.pow(10, 9) // Assuming 9 decimals, adjust if needed
         )

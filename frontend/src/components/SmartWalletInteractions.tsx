@@ -9,6 +9,8 @@ import {
 } from '../walletInteractions';
 import { Transaction, PublicKey, SystemProgram, TransactionInstruction } from '@solana/web3.js';
 import WalletBalanceManager from './WalletBalanceManager';
+import { DateTime } from 'luxon';
+import { TOKEN_PROGRAM_ID, getMint } from '@solana/spl-token';
 
 const SmartWalletInteractions: React.FC = () => {
   const { connection } = useConnection();
@@ -17,7 +19,7 @@ const SmartWalletInteractions: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   const [maxAmount, setMaxAmount] = useState<string>('');
-  const [expiry, setExpiry] = useState<string>('');
+  const [expiry, setExpiry] = useState<string>(DateTime.now().plus({ years: 1 }).toISO());
   const [amount, setAmount] = useState<string>('');
   const [transferType, setTransferType] = useState<TransferType>(TransferType.Sol);
   const [recipient, setRecipient] = useState<string>('');
@@ -25,6 +27,7 @@ const SmartWalletInteractions: React.FC = () => {
   const [dappToApprove, setDappToApprove] = useState<string>('');
 
   const [hasSmartWallet, setHasSmartWallet] = useState<boolean | null>(null);
+  const [smartWalletId, setSmartWalletId] = useState<string | null>(null);
   const [approvedDapps, setApprovedDapps] = useState<Array<{
     dapp: string;
     tokenMint: string;
@@ -34,12 +37,23 @@ const SmartWalletInteractions: React.FC = () => {
 
   const PROGRAM_ID = new PublicKey('5UwRT1ngPvSWjUWYcCoRmwVTs5WFUgdDfAW29Ab5XMx2');
 
+  const [expiryDateTime, setExpiryDateTime] = useState<string>(
+    DateTime.now().plus({ years: 1 }).toFormat("yyyy-MM-dd'T'HH:mm")
+  );
+
+  const [approvalType, setApprovalType] = useState<'SOL' | 'Token'>('SOL');
+  const [tokenMint, setTokenMint] = useState<string>('');
+  const [userTokens, setUserTokens] = useState<Array<{ mint: string, balance: string, decimals: number }>>([]);
+
+  const [approvalAmount, setApprovalAmount] = useState<string>('');
+
   useEffect(() => {
     if (wallet.publicKey) {
       checkSmartWallet();
       fetchApprovedDapps();
+      fetchUserTokens();
     }
-  }, [wallet.publicKey, connection]);
+  }, [wallet.publicKey, smartWalletId,connection]);
 
   const checkSmartWallet = async () => {
     if (!wallet.publicKey) return;
@@ -52,9 +66,13 @@ const SmartWalletInteractions: React.FC = () => {
 
       const accountInfo = await connection.getAccountInfo(walletAddress);
       setHasSmartWallet(accountInfo !== null);
+      if (accountInfo !== null) {
+        setSmartWalletId(walletAddress.toBase58());
+      }
     } catch (err) {
       console.error('Error checking smart wallet:', err);
       setHasSmartWallet(false);
+      setSmartWalletId(null);
     }
   };
 
@@ -102,6 +120,30 @@ const SmartWalletInteractions: React.FC = () => {
       setApprovedDapps(approvedDapps);
     } catch (err) {
       console.error('Error fetching approved dapps:', err);
+    }
+  };
+
+  const fetchUserTokens = async () => {
+
+    console.log('Fetching user tokens for', smartWalletId);
+    if (!wallet.publicKey || !smartWalletId) return;
+
+    try {
+      const tokenAccounts = await connection.getParsedTokenAccountsByOwner(new PublicKey(smartWalletId), {
+        programId: TOKEN_PROGRAM_ID,
+      });
+
+      console.log('Token accounts:', tokenAccounts);
+
+      const tokens = tokenAccounts.value.map(accountInfo => ({
+        mint: accountInfo.account.data.parsed.info.mint,
+        balance: accountInfo.account.data.parsed.info.tokenAmount.uiAmountString,
+        decimals: accountInfo.account.data.parsed.info.tokenAmount.decimals,  
+      }));
+
+      setUserTokens(tokens);
+    } catch (error) {
+      console.error('Error fetching user tokens:', error);
     }
   };
 
@@ -162,6 +204,8 @@ const SmartWalletInteractions: React.FC = () => {
       console.log('Transaction confirmed');
       setTxid(signature);
       setError(null);
+      setSmartWalletId(walletAddress.toBase58());
+      setHasSmartWallet(true);
     } catch (err) {
       console.error('Error creating wallet:', err);
       setError(`Failed to create wallet: ${err instanceof Error ? err.message : String(err)}`);
@@ -169,13 +213,36 @@ const SmartWalletInteractions: React.FC = () => {
   };
 
   const handleApproveDapp = async () => {
-    if (!wallet.publicKey) {
+    if (!wallet.publicKey || !smartWalletId) {
       setError("Wallet not connected");
       return;
     }
 
     try {
       console.log('Approving dApp for', wallet.publicKey.toBase58());
+
+      const dappPublicKey = new PublicKey(dappToApprove);
+      const mintPublicKey = approvalType === 'Token' ? new PublicKey(tokenMint) : PublicKey.default;
+
+      let amountToApprove: bigint;
+
+      if (approvalType === 'SOL') {
+        // Convert SOL to lamports
+        amountToApprove = BigInt(Math.floor(parseFloat(approvalAmount) * 1e9));
+      } else {
+        // Find the selected token in userTokens
+        const selectedToken = userTokens.find(token => token.mint === tokenMint);
+        if (!selectedToken) {
+          throw new Error("Selected token not found in user's tokens");
+        }
+
+        // Use the decimals information from the token
+        const tokenDecimals = selectedToken.decimals;
+
+        // Convert token amount to smallest units
+        amountToApprove = BigInt(Math.floor(parseFloat(approvalAmount) * 10 ** tokenDecimals));
+
+      }
 
       // Derive the wallet address (PDA)
       const [walletAddress, _] = PublicKey.findProgramAddressSync(
@@ -185,19 +252,19 @@ const SmartWalletInteractions: React.FC = () => {
 
       console.log('Wallet address:', walletAddress.toBase58());
 
-      // Use the dApp public key provided by the user
-      const dappPublicKey = new PublicKey(dappToApprove);
-
       // Derive the approval account address
       const [approvalAddress, __] = PublicKey.findProgramAddressSync(
-        [Buffer.from("approval"), walletAddress.toBuffer(), dappPublicKey.toBuffer(), PublicKey.default.toBuffer()],
+        [Buffer.from("approval"), walletAddress.toBuffer(), dappPublicKey.toBuffer(), mintPublicKey.toBuffer()],
         PROGRAM_ID
       );
 
       console.log('Approval address:', approvalAddress.toBase58());
 
+      // Convert the selected date and time to a Unix timestamp
+      const expiryTimestamp = DateTime.fromISO(expiryDateTime).toUnixInteger();
+
       // Create the instruction data for dApp approval
-      const instruction = approveDappInstruction(BigInt(maxAmount), parseInt(expiry));
+      const instruction = approveDappInstruction(amountToApprove, expiryTimestamp);
       const instructionBuffer = serializeWalletInstruction(instruction);
 
       // Create the instruction to approve the dApp
@@ -206,7 +273,7 @@ const SmartWalletInteractions: React.FC = () => {
           { pubkey: wallet.publicKey, isSigner: true, isWritable: true },
           { pubkey: walletAddress, isSigner: false, isWritable: false },
           { pubkey: dappPublicKey, isSigner: false, isWritable: false },
-          { pubkey: PublicKey.default, isSigner: false, isWritable: false }, // Default pubkey for SOL
+          { pubkey: mintPublicKey, isSigner: false, isWritable: false },
           { pubkey: approvalAddress, isSigner: false, isWritable: true },
           { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
         ],
@@ -314,6 +381,11 @@ const SmartWalletInteractions: React.FC = () => {
 
       {hasSmartWallet && (
         <>
+          <div className="bg-gray-900 bg-opacity-50 rounded-lg p-8 border border-gray-800 shadow-xl">
+            <h2 className="text-2xl font-semibold mb-4 text-white">Smart Wallet Information</h2>
+            <p className="text-gray-300">Smart Wallet ID: {smartWalletId}</p>
+          </div>
+
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <div className="bg-gray-900 bg-opacity-50 backdrop-filter backdrop-blur-lg rounded-lg p-8 border border-gray-800 shadow-xl">
               <h2 className="text-2xl font-semibold mb-4 text-white">Wallet Balance</h2>
@@ -344,19 +416,54 @@ const SmartWalletInteractions: React.FC = () => {
               />
               <input
                 type="text"
-                placeholder="Max Amount"
-                value={maxAmount}
-                onChange={(e) => setMaxAmount(e.target.value)}
+                placeholder="Approval Amount"
+                value={approvalAmount}
+                onChange={(e) => setApprovalAmount(e.target.value)}
                 className="w-full bg-gray-700 bg-opacity-50 text-white px-4 py-3 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 border border-gray-600"
               />
             </div>
-            <input
-              type="text"
-              placeholder="Expiry (Unix timestamp)"
-              value={expiry}
-              onChange={(e) => setExpiry(e.target.value)}
-              className="w-full bg-gray-700 bg-opacity-50 text-white px-4 py-3 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 border border-gray-600 mb-6"
-            />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              <select
+                value={approvalType}
+                onChange={(e) => {
+                  setApprovalType(e.target.value as 'SOL' | 'Token');
+                  if (e.target.value === 'SOL') {
+                    setTokenMint('');
+                  }
+                }}
+                className="w-full bg-gray-700 bg-opacity-50 text-white px-4 py-3 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 border border-gray-600"
+              >
+                <option value="SOL">SOL</option>
+                <option value="Token">Token</option>
+              </select>
+              {approvalType === 'Token' && (
+                <select
+                  value={tokenMint}
+                  onChange={(e) => setTokenMint(e.target.value)}
+                  className="w-full bg-gray-700 bg-opacity-50 text-white px-4 py-3 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 border border-gray-600"
+                >
+                  <option value="">Select a token</option>
+                  {userTokens.map((token) => (
+                    <option key={token.mint} value={token.mint}>
+                      {token.mint} (Balance: {token.balance})
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+            <div className="mb-6">
+              <label htmlFor="expiryDateTime" className="block text-sm font-medium text-gray-400 mb-2">
+                Expiry Date and Time
+              </label>
+              <input
+                id="expiryDateTime"
+                type="datetime-local"
+                value={expiryDateTime}
+                onChange={(e) => setExpiryDateTime(e.target.value)}
+                className="w-full bg-gray-700 bg-opacity-50 text-white px-4 py-3 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 border border-gray-600"
+                style={{colorScheme: 'dark'}}
+              />
+            </div>
             <button onClick={handleApproveDapp} className="w-full bg-white text-black hover:bg-gray-200 font-medium py-3 px-6 rounded-md transition duration-300 ease-in-out transform hover:scale-105">
               Approve dApp
             </button>
