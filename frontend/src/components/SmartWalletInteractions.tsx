@@ -5,12 +5,15 @@ import {
   approveDappInstruction,
   executeTransactionInstruction,
   TransferType,
-  serializeWalletInstruction
+  serializeWalletInstruction,
+  withdrawInstruction
 } from '../walletInteractions';
-import { Transaction, PublicKey, SystemProgram, TransactionInstruction } from '@solana/web3.js';
+import { Transaction, PublicKey, SystemProgram, TransactionInstruction, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import WalletBalanceManager from './WalletBalanceManager';
 import { DateTime } from 'luxon';
-import { TOKEN_PROGRAM_ID, getMint } from '@solana/spl-token';
+import { TOKEN_PROGRAM_ID, getAssociatedTokenAddress, getMint } from '@solana/spl-token';
+import { depositSol, withdrawSol, depositToken, withdrawToken } from '../utils/smartWalletInteractions';
+import { sendSol, sendToken } from '../utils/smartWalletInteractions';
 
 const SmartWalletInteractions: React.FC = () => {
   const { connection } = useConnection();
@@ -21,6 +24,7 @@ const SmartWalletInteractions: React.FC = () => {
   const [maxAmount, setMaxAmount] = useState<string>('');
   const [expiry, setExpiry] = useState<string>(DateTime.now().plus({ years: 1 }).toISO());
   const [amount, setAmount] = useState<string>('');
+  const [withdrawAmount, setWithdrawAmount] = useState<string>('');
   const [transferType, setTransferType] = useState<TransferType>(TransferType.Sol);
   const [recipient, setRecipient] = useState<string>('');
   const [walletOwner, setWalletOwner] = useState<string>('');
@@ -46,6 +50,11 @@ const SmartWalletInteractions: React.FC = () => {
   const [userTokens, setUserTokens] = useState<Array<{ mint: string, balance: string, decimals: number }>>([]);
 
   const [approvalAmount, setApprovalAmount] = useState<string>('');
+
+  const [sendAmount, setSendAmount] = useState<string>('');
+  const [sendRecipient, setSendRecipient] = useState<string>('');
+  const [sendTokenMint, setSendTokenMint] = useState<string>('');
+  const [sendType, setSendType] = useState<'SOL' | 'Token'>('SOL');
 
   useEffect(() => {
     if (wallet.publicKey) {
@@ -367,6 +376,63 @@ const SmartWalletInteractions: React.FC = () => {
     }
   };
 
+  const handleSend = async () => {
+    if (!wallet.publicKey || !smartWalletId) {
+      setError("Wallet not connected or Smart Wallet not created");
+      return;
+    }
+
+    try {
+      const amount = parseFloat(sendAmount);
+      const recipientPublicKey = new PublicKey(sendRecipient);
+
+      let transaction: string;
+
+      if (sendType === 'SOL') {
+        transaction = await sendSol(
+          connection,
+          PROGRAM_ID,
+          wallet.publicKey,
+          recipientPublicKey,
+          amount
+        );
+      } else {
+        const tokenMintPublicKey = new PublicKey(sendTokenMint);
+        transaction = await sendToken(
+          connection,
+          PROGRAM_ID,
+          wallet.publicKey,
+          tokenMintPublicKey,
+          recipientPublicKey,
+          amount
+        );
+      }
+
+      // Sign and send the transaction
+      const tx = Transaction.from(Buffer.from(transaction, 'base64'));
+      if (!wallet.signTransaction) {
+        throw new Error('Wallet does not support signing transactions');
+      }
+      const signedTx = await wallet.signTransaction(tx);
+      const signature = await connection.sendRawTransaction(signedTx.serialize());
+      const latestBlockhash = await connection.getLatestBlockhash();
+      await connection.confirmTransaction({
+        signature,
+        blockhash: latestBlockhash.blockhash,
+        lastValidBlockHeight: latestBlockhash.lastValidBlockHeight
+      });
+
+      setTxid(signature);
+      setError(null);
+      setSendAmount('');
+      setSendRecipient('');
+      setSendTokenMint('');
+    } catch (err) {
+      console.error('Error sending assets:', err);
+      setError(`Failed to send assets: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
   return (
     <div className="space-y-8">
       {!hasSmartWallet && (
@@ -393,12 +459,52 @@ const SmartWalletInteractions: React.FC = () => {
             </div>
             <div className="bg-gray-900 bg-opacity-50 backdrop-filter backdrop-blur-lg rounded-lg p-8 border border-gray-800 shadow-xl">
               <h2 className="text-2xl font-semibold mb-4 text-white">Quick Actions</h2>
-              <div className="flex space-x-4">
-                <button className="bg-white text-black hover:bg-gray-200 font-medium py-2 px-6 rounded-md transition duration-300 ease-in-out transform hover:scale-105">
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <input
+                    type="text"
+                    placeholder="Amount"
+                    value={sendAmount}
+                    onChange={(e) => setSendAmount(e.target.value)}
+                    className="w-full bg-gray-700 bg-opacity-50 text-white px-4 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 border border-gray-600"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Recipient Public Key"
+                    value={sendRecipient}
+                    onChange={(e) => setSendRecipient(e.target.value)}
+                    className="w-full bg-gray-700 bg-opacity-50 text-white px-4 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 border border-gray-600"
+                  />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <select
+                    value={sendType}
+                    onChange={(e) => setSendType(e.target.value as 'SOL' | 'Token')}
+                    className="w-full bg-gray-700 bg-opacity-50 text-white px-4 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 border border-gray-600"
+                  >
+                    <option value="SOL">SOL</option>
+                    <option value="Token">Token</option>
+                  </select>
+                  {sendType === 'Token' && (
+                    <select
+                      value={sendTokenMint}
+                      onChange={(e) => setSendTokenMint(e.target.value)}
+                      className="w-full bg-gray-700 bg-opacity-50 text-white px-4 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 border border-gray-600"
+                    >
+                      <option value="">Select a token</option>
+                      {userTokens.map((token) => (
+                        <option key={token.mint} value={token.mint}>
+                          {token.mint} (Balance: {token.balance})
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+                <button 
+                  onClick={handleSend}
+                  className="w-full bg-white text-black hover:bg-gray-200 font-medium py-2 px-6 rounded-md transition duration-300 ease-in-out transform hover:scale-105"
+                >
                   Send
-                </button>
-                <button className="bg-black text-white hover:bg-gray-800 font-medium py-2 px-6 rounded-md transition duration-300 ease-in-out transform hover:scale-105 border border-white">
-                  Receive
                 </button>
               </div>
             </div>

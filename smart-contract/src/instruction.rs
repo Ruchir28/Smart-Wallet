@@ -33,6 +33,18 @@ pub enum WalletInstruction {
         amount: u64,
         transfer_type: TransferType,
     },
+
+    /// Withdraws funds from the wallet
+    /// 
+    /// Accounts expected:
+    /// 1. `[signer]` The wallet owner
+    /// 2. `[writable]` The wallet account
+    /// 3. `[writable]` The recipient account (usually the owner's main account)
+    /// 4. `[]` The system program
+    Withdraw {
+        amount: u64,
+        transfer_type: TransferType,
+    },
 }
 
 #[derive(BorshSerialize, BorshDeserialize)]
@@ -40,23 +52,6 @@ pub enum TransferType {
     Sol,
     Token,
 }
-
-// impl BorshSerialize for WalletInstruction {
-//     fn serialize<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
-//         match self {
-//             WalletInstruction::CreateWallet => writer.write_all(&[0]),
-//             WalletInstruction::ApproveDapp { max_amount, expiry } => {
-//                 writer.write_all(&[1])?;
-//                 max_amount.serialize(writer)?;
-//                 expiry.serialize(writer)
-//             },
-//             WalletInstruction::ExecuteTransaction { amount } => {
-//                 writer.write_all(&[2])?;
-//                 amount.serialize(writer)
-//             },
-//         }
-//     }
-// }
 
 impl WalletInstruction {
     /// Unpacks a byte buffer into a WalletInstruction

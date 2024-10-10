@@ -10,7 +10,7 @@ pub mod instruction;
 mod processor;
 mod state;
 use instruction::WalletInstruction;
-use processor::{approve_dapp, create_wallet, execute_transaction};
+use processor::{approve_dapp, create_wallet, execute_transaction, withdraw};
 
 
 entrypoint!(process_instruction);
@@ -35,6 +35,10 @@ pub fn process_instruction(
         WalletInstruction::ExecuteTransaction { amount, transfer_type } => {
             msg!("Instruction: Execute Transaction with amount: {}", amount);
             execute_transaction(program_id, accounts, amount, transfer_type)?;
+        }
+        WalletInstruction::Withdraw { amount, transfer_type } => {
+            msg!("Instruction: Withdraw with amount: {}", amount);
+            withdraw(program_id, accounts, amount, transfer_type)?;
         }
     }
 

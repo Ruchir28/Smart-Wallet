@@ -1,7 +1,5 @@
 import { serialize } from "borsh";
 import { Buffer } from "buffer";
-import { PublicKey } from "@solana/web3.js";
-
 // Define the transfer types
 export enum TransferType {
     Sol = 0,
@@ -13,6 +11,7 @@ export enum WalletInstructionType {
     CreateWallet = 0,
     ApproveDapp = 1,
     ExecuteTransaction = 2,
+    Withdraw = 3,
 }
 
 // Data classes for each instruction
@@ -39,17 +38,28 @@ class ExecuteTransactionInstruction {
     }
 }
 
+class WithdrawInstruction {
+    amount: bigint;
+    transferType: TransferType;
+    constructor(properties: { amount: bigint; transferType: TransferType }) {
+        this.amount = properties.amount;
+        this.transferType = properties.transferType;
+    }
+}
+
 const InstructionSchema = {
   CreateWalletInstruction: { struct: {} },
   ApproveDappInstruction: { struct: { maxAmount: 'u64', expiry: 'i64'} },
   ExecuteTransactionInstruction: { struct: { amount: 'u64', transferType: 'u8' } },
+  WithdrawInstruction: { struct: { amount: 'u64', transferType: 'u8' } },
 };
 
 // Union type for WalletInstruction
 type WalletInstruction =
     | { type: WalletInstructionType.CreateWallet; data: CreateWalletInstruction }
     | { type: WalletInstructionType.ApproveDapp; data: ApproveDappInstruction }
-    | { type: WalletInstructionType.ExecuteTransaction; data: ExecuteTransactionInstruction };
+    | { type: WalletInstructionType.ExecuteTransaction; data: ExecuteTransactionInstruction }
+    | { type: WalletInstructionType.Withdraw; data: WithdrawInstruction };
 
 // WalletInstruction creation functions
 export function createWalletInstruction(): WalletInstruction {
@@ -62,6 +72,10 @@ export function approveDappInstruction(maxAmount: bigint, expiry: number): Walle
 
 export function executeTransactionInstruction(amount: bigint, transferType: TransferType): WalletInstruction {
     return { type: WalletInstructionType.ExecuteTransaction, data: new ExecuteTransactionInstruction({ amount, transferType }) };
+}
+
+export function withdrawInstruction(amount: bigint, transferType: TransferType): WalletInstruction {
+    return { type: WalletInstructionType.Withdraw, data: new WithdrawInstruction({ amount, transferType }) };
 }
 
 // Serialization method for WalletInstruction using Borsh
@@ -84,6 +98,9 @@ export function serializeWalletInstruction(instruction: WalletInstruction): Uint
             break;
         case WalletInstructionType.ExecuteTransaction:
             serializedData = serialize(InstructionSchema.ExecuteTransactionInstruction, instruction.data);
+            break;
+        case WalletInstructionType.Withdraw:
+            serializedData = serialize(InstructionSchema.WithdrawInstruction, instruction.data);
             break;
         default:
             throw new Error('Unknown instruction type');

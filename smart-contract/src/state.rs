@@ -6,42 +6,6 @@ use solana_program::{
 };
 
 #[derive(BorshSerialize, BorshDeserialize, Debug)]
-pub struct WalletData {
-    pub owner: Pubkey,
-    pub transaction_count: u64,
-    pub approved_dapps_count: u8,
-}
-
-impl WalletData {
-    pub fn new(owner: Pubkey) -> Self {
-        Self {
-            owner,
-            transaction_count: 0,
-            approved_dapps_count: 0,
-        }
-    }
-
-    pub fn increment_transaction_count(&mut self) {
-        self.transaction_count += 1;
-    }
-
-    pub fn increment_approved_dapps_count(&mut self) {
-        self.approved_dapps_count += 1;
-    }
-
-    pub fn decrement_approved_dapps_count(&mut self) {
-        self.approved_dapps_count = self.approved_dapps_count.saturating_sub(1);
-    }
-
-    pub fn verify_owner(&self, signer: &Pubkey) -> Result<(), ProgramError> {
-        if &self.owner != signer {
-            return Err(ProgramError::InvalidAccountData);
-        }
-        Ok(())
-    }
-}
-
-#[derive(BorshSerialize, BorshDeserialize, Debug)]
 pub struct DAppApproval {
     pub is_approved: bool,
     pub max_amount: u64,
@@ -108,17 +72,6 @@ pub fn get_associated_token_address(wallet_pda: &Pubkey, token_mint: &Pubkey) ->
         ],
         &spl_associated_token_account::id(),
     ).0
-}
-
-// Helper functions for account operations
-pub fn unpack_wallet_data(wallet_account: &AccountInfo) -> Result<WalletData, ProgramError> {
-    WalletData::try_from_slice(&wallet_account.data.borrow())
-        .map_err(|_| ProgramError::InvalidAccountData)
-}
-
-pub fn pack_wallet_data(wallet_data: &WalletData, wallet_account: &AccountInfo) -> Result<(), ProgramError> {
-    wallet_data.serialize(&mut &mut wallet_account.data.borrow_mut()[..])
-        .map_err(|_| ProgramError::AccountDataTooSmall)
 }
 
 pub fn unpack_approval_data(approval_account: &AccountInfo) -> Result<DAppApproval, ProgramError> {

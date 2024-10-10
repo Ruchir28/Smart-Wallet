@@ -2,7 +2,7 @@ use solana_program::{
     account_info::{next_account_info, AccountInfo}, clock::Clock, entrypoint::ProgramResult, msg, program::invoke_signed, program_error::ProgramError, pubkey::Pubkey, rent::Rent, system_instruction, sysvar::Sysvar
 };
 
-use crate::{instruction::TransferType, state::{derive_approval_address, derive_wallet_address, pack_approval_data, pack_wallet_data, unpack_approval_data, unpack_wallet_data, DAppApproval, WalletData, DAPP_APPROVAL_SIZE}};
+use crate::{instruction::TransferType, state::{derive_approval_address, derive_wallet_address, pack_approval_data, unpack_approval_data, DAppApproval, DAPP_APPROVAL_SIZE}};
 use spl_token::instruction as token_instruction;
 
 pub fn create_wallet(program_id: &Pubkey, accounts: &[AccountInfo], _instrcution_data: &[u8]) -> ProgramResult {
@@ -234,5 +234,82 @@ pub fn execute_transaction(
     }
 
     msg!("Transaction executed successfully");
+    Ok(())
+}
+
+pub fn withdraw(program_id: &Pubkey, accounts: &[AccountInfo], amount: u64, transfer_type: TransferType) -> ProgramResult {
+    let account_info_iter = &mut accounts.iter();
+
+    let user_account = next_account_info(account_info_iter)?;
+    let wallet_account = next_account_info(account_info_iter)?;
+    let recipient_account = next_account_info(account_info_iter)?;
+    let system_program = next_account_info(account_info_iter)?;
+
+    // check the signer
+    if !user_account.is_signer {
+        return Err(ProgramError::MissingRequiredSignature.into());
+    }
+
+    // Get the wallet PDA
+    let (wallet_pda, bump_seed) = derive_wallet_address(user_account.key, program_id);
+
+    // Verify that the provided wallet account is actually the PDA we expect
+    if wallet_pda != *wallet_account.key {
+        return Err(ProgramError::InvalidAccountData.into());
+    }
+
+    match transfer_type {
+        TransferType::Sol => {
+            msg!("Withdrawing SOL from wallet {:?} to recipient {:?}, amount: {:?}", wallet_account.key, recipient_account.key, amount);
+            msg!("Wallet account's balance: {:?}", wallet_account.lamports());
+
+            // Check if wallet has enough balance for withdrawal
+            let wallet_balance = wallet_account.lamports();
+    
+            if wallet_balance < amount {
+                msg!("Wallet does not have enough balance for withdrawal");
+                return Err(ProgramError::InsufficientFunds.into());
+            }
+    
+            // Withdraw amount from wallet
+            **wallet_account.try_borrow_mut_lamports()? -= amount;
+            **recipient_account.try_borrow_mut_lamports()? += amount;
+        }
+        TransferType::Token => {
+            let token_mint_account = next_account_info(account_info_iter)?;
+            let wallet_token_account = next_account_info(account_info_iter)?;
+            let token_program = next_account_info(account_info_iter)?;
+
+            // Verify that the associated token account is valid
+            if wallet_token_account.owner != token_program.key {
+                return Err(ProgramError::InvalidAccountData.into());
+            }
+
+            msg!("Withdrawing tokens from wallet_token_account {:?} to recipient_account {:?}, amount: {:?}", wallet_token_account.key, recipient_account.key, amount);
+
+            // Execute the token transfer
+            invoke_signed(
+                &spl_token::instruction::transfer(
+                    token_program.key,
+                    wallet_token_account.key,
+                    recipient_account.key,
+                    wallet_account.key,
+                    &[],
+                    amount,
+                )?,
+                &[
+                    wallet_account.clone(),
+                    wallet_token_account.clone(),
+                    recipient_account.clone(),
+                    token_program.clone(),
+                    system_program.clone(),
+                ],
+                &[&[b"wallet", user_account.key.as_ref(), &[bump_seed]]],
+            )?;
+        }
+    }
+
+    msg!("Withdrawal completed successfully");
+
     Ok(())
 }
