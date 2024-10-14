@@ -1,104 +1,43 @@
-import React, { useState, useEffect } from 'react';
-import { useConnection, useWallet } from '@solana/wallet-adapter-react';
+import React, { useState } from 'react';
+import { useWallet } from '@solana/wallet-adapter-react';
 import { PublicKey, Transaction } from '@solana/web3.js';
-import { TOKEN_PROGRAM_ID, getAssociatedTokenAddress } from '@solana/spl-token';
+import { getAssociatedTokenAddress } from '@solana/spl-token';
 import { depositSol, withdrawSol, depositToken, withdrawToken } from '../utils/smartWalletInteractions';
+import { ConnectionManager } from '../utils/ConnectionManager';
+import { useSelector } from 'react-redux';
+import { RootState } from '../store/store';
+import LoadingButton from './LoadingButton';
 
 
 interface WalletBalanceManagerProps {
     programId: PublicKey;
+    onSuccess: (signature: string) => void;
+    onError: (errorMessage: string) => void;
 }
 
 interface TokenAccount {
     mint: string;
     balance: number;
+    decimals: number;
     symbol: string;
     name: string;
     logo: string;
 }
 
-const WalletBalanceManager: React.FC<WalletBalanceManagerProps> = ({ programId }) => {
-    const { connection } = useConnection();
+const WalletBalanceManager: React.FC<WalletBalanceManagerProps> = ({ programId, onSuccess, onError }) => {
+    const connection  = ConnectionManager.getInstance().getConnection();
     const wallet = useWallet();
-
-    const [solBalance, setSolBalance] = useState<number | null>(null);
-    const [tokenAccounts, setTokenAccounts] = useState<TokenAccount[]>([]);
+    const tokenAccounts = useSelector((state: RootState) => state.smartWallet.tokens);
+    const userTokenAccounts = useSelector((state: RootState) => state.wallet.tokens);
+    const solBalance = useSelector((state: RootState) => state.smartWallet.balance);
+    
     const [selectedToken, setSelectedToken] = useState<string>('SOL');
     const [depositAmount, setDepositAmount] = useState<string>('');
     const [withdrawAmount, setWithdrawAmount] = useState<string>('');
-    const [error, setError] = useState<string | null>(null);
     const [action, setAction] = useState<'deposit' | 'withdraw' | null>(null);
-    const [userTokenAccounts, setUserTokenAccounts] = useState<TokenAccount[]>([]);
-
-    useEffect(() => {
-        if (wallet.publicKey) {
-            fetchBalances();
-            fetchUserTokenAccounts();
-        }
-    }, [wallet.publicKey, connection]);
-
-    const fetchBalances = async () => {
-        if (!wallet.publicKey) return;
-
-        try {
-            const [walletAddress, _] = PublicKey.findProgramAddressSync(
-                [Buffer.from("wallet"), wallet.publicKey.toBuffer()],
-                programId
-            );
-
-            // Fetch SOL balance
-            const solBalance = await connection.getBalance(walletAddress);
-            setSolBalance(solBalance / 1e9); // Convert lamports to SOL
-
-            // Fetch all token accounts
-            const tokenAccounts = await connection.getParsedTokenAccountsByOwner(walletAddress, {
-                programId: TOKEN_PROGRAM_ID
-            });
-
-            const tokens = await Promise.all(tokenAccounts.value.map(async ({ account }) => {
-                const mintAddress = new PublicKey(account.data.parsed.info.mint);
-                const tokenInfo = await fetchTokenMetadata(mintAddress);
-                return {
-                    mint: account.data.parsed.info.mint,
-                    balance: account.data.parsed.info.tokenAmount.uiAmount,
-                    symbol: tokenInfo.symbol,
-                    name: tokenInfo.name,
-                    logo: tokenInfo.logo
-                };
-            }));
-
-            setTokenAccounts(tokens);
-        } catch (err) {
-            console.error('Error fetching balances:', err);
-        }
-    };
-
-    const fetchUserTokenAccounts = async () => {
-        if (!wallet.publicKey) return;
-
-        try {
-            const tokenAccounts = await connection.getParsedTokenAccountsByOwner(wallet.publicKey, {
-                programId: TOKEN_PROGRAM_ID
-            });
-
-            const tokens = await Promise.all(tokenAccounts.value.map(async ({ account }) => {
-                const mintAddress = new PublicKey(account.data.parsed.info.mint);
-                const tokenInfo = await fetchTokenMetadata(mintAddress);
-                return {
-                    mint: account.data.parsed.info.mint,
-                    balance: account.data.parsed.info.tokenAmount.uiAmount,
-                    symbol: tokenInfo.symbol,
-                    name: tokenInfo.name,
-                    logo: tokenInfo.logo
-                };
-            }));
-
-            setUserTokenAccounts(tokens);
-        } catch (err) {
-            console.error('Error fetching user token accounts:', err);
-        }
-    };
-
+    const [isDepositing, setIsDepositing] = useState(false);
+    const [isWithdrawing, setIsWithdrawing] = useState(false);
+  
     const fetchTokenMetadata = async (mintAddress: PublicKey): Promise<{ symbol: string; name: string; logo: string }> => {
         try {
             // Fetch metadata from the Solana Token List
@@ -111,30 +50,32 @@ const WalletBalanceManager: React.FC<WalletBalanceManagerProps> = ({ programId }
                 return {
                     symbol: tokenInfo.symbol,
                     name: tokenInfo.name,
-                    logo: tokenInfo.logoURI || '/sol.png' // Default to SOL logo if not available
+                    logo: tokenInfo.logoURI || '/unknown-token.svg' // Use unknown-token.svg if logo is not available
                 };
             }
-            // If still not found, return default values
+            // If token not found, return default values
             return {
                 symbol: 'UNKNOWN',
                 name: 'Unknown Token',
-                logo: '/sol.png' // Default to SOL logo
+                logo: '/unknown-token.svg' // Use unknown-token.svg for unknown tokens
             };
         } catch (error) {
             console.error('Error fetching token metadata:', error);
             return {
                 symbol: 'ERROR',
                 name: 'Error Fetching Token',
-                logo: '/sol.png' // Default to SOL logo
+                logo: '/unknown-token.svg' // Use unknown-token.svg for errors
             };
         }
     };
 
     const handleDeposit = async () => {
         if (!wallet.publicKey) {
-            setError("Wallet not connected");
+            onError("Wallet not connected");
             return;
         }
+
+        setIsDepositing(true);
 
         try {
             let transactionBase64: string;
@@ -143,7 +84,11 @@ const WalletBalanceManager: React.FC<WalletBalanceManagerProps> = ({ programId }
             } else {
                 const tokenMint = new PublicKey(selectedToken);
                 const userATA = await getAssociatedTokenAddress(tokenMint, wallet.publicKey);
-                transactionBase64 = await depositToken(connection, programId, wallet.publicKey, tokenMint, userATA, parseFloat(depositAmount));
+                const tokenInfo = userTokenAccounts.find(token => token.mint === selectedToken);
+                if(!tokenInfo) {
+                    throw new Error('Token information not found');
+                }
+                transactionBase64 = await depositToken(connection, programId, wallet.publicKey, tokenMint, userATA, parseFloat(depositAmount), tokenInfo.decimals);
             }
 
             const transaction = Transaction.from(Buffer.from(transactionBase64, 'base64'));
@@ -160,23 +105,28 @@ const WalletBalanceManager: React.FC<WalletBalanceManagerProps> = ({ programId }
                 });
 
                 console.log(`Deposit successful. Transaction signature: ${signature}`);
-                fetchBalances();
+                onSuccess(signature);
+                // fetchBalances();
                 setDepositAmount('');
             } else {
                 console.error('Wallet does not support signing transactions');
-                setError("Wallet does not support signing transactions");
+                onError("Wallet does not support signing transactions");
             }
         } catch (err) {
             console.error('Error depositing:', err);
-            setError(`Failed to deposit: ${err instanceof Error ? err.message : String(err)}`);
+            onError(`Failed to deposit: ${err instanceof Error ? err.message : String(err)}`);
+        } finally {
+            setIsDepositing(false);
         }
     };
 
     const handleWithdraw = async () => {
         if (!wallet.publicKey) {
-            setError("Wallet not connected");
+            onError("Wallet not connected");
             return;
         }
+
+        setIsWithdrawing(true);
 
         try {
             let transactionBase64: string;
@@ -185,7 +135,11 @@ const WalletBalanceManager: React.FC<WalletBalanceManagerProps> = ({ programId }
             } else {
                 const tokenMint = new PublicKey(selectedToken);
                 const userATA = await getAssociatedTokenAddress(tokenMint, wallet.publicKey);
-                transactionBase64 = await withdrawToken(connection, programId, wallet.publicKey, tokenMint, userATA, parseFloat(withdrawAmount));
+                const tokenInfo = userTokenAccounts.find(token => token.mint === selectedToken);
+                if(!tokenInfo) {
+                    throw new Error('Token information not found');
+                }
+                transactionBase64 = await withdrawToken(connection, programId, wallet.publicKey, tokenMint, userATA, parseFloat(withdrawAmount),tokenInfo.decimals);
             }
 
             const transaction = Transaction.from(Buffer.from(transactionBase64, 'base64'));
@@ -202,15 +156,18 @@ const WalletBalanceManager: React.FC<WalletBalanceManagerProps> = ({ programId }
                 });
 
                 console.log(`Withdrawal successful. Transaction signature: ${signature}`);
-                fetchBalances();
+                // fetchBalances();
                 setWithdrawAmount('');
+                onSuccess(signature);
             } else {
                 console.error('Wallet does not support signing transactions');
-                setError("Wallet does not support signing transactions");
+                onError("Wallet does not support signing transactions");
             }
         } catch (err) {
             console.error('Error withdrawing:', err);
-            setError(`Failed to withdraw: ${err instanceof Error ? err.message : String(err)}`);
+            onError(`Failed to withdraw: ${err instanceof Error ? err.message : String(err)}`);
+        } finally {
+            setIsWithdrawing(false);
         }
     };
 
@@ -257,12 +214,17 @@ const WalletBalanceManager: React.FC<WalletBalanceManagerProps> = ({ programId }
                         />
                     </div>
                 </div>
-                <button 
-                    onClick={action === 'deposit' ? handleDeposit : handleWithdraw} 
-                    className={`w-full ${action === 'deposit' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'} text-white font-bold py-2 px-4 rounded-md transition duration-300 ease-in-out transform hover:scale-105`}
-                >
-                    {action === 'deposit' ? 'Deposit' : 'Withdraw'}
-                </button>
+                <LoadingButton 
+                    onClick={action === 'deposit' ? handleDeposit : handleWithdraw}
+                    isLoading={action === 'deposit' ? isDepositing : isWithdrawing}
+                    text={action === 'deposit' ? 'Deposit' : 'Withdraw'}
+                    loadingText={action === 'deposit' ? 'Depositing...' : 'Withdrawing...'}
+                    className={`w-full font-bold py-2 px-4 rounded-md transition duration-300 ease-in-out transform hover:scale-105 ${
+                        action === 'deposit' 
+                            ? 'bg-green-600 hover:bg-green-700 text-white' 
+                            : 'bg-red-600 hover:bg-red-700 text-white'
+                    }`}
+                />
             </div>
         );
     };
@@ -274,13 +236,13 @@ const WalletBalanceManager: React.FC<WalletBalanceManagerProps> = ({ programId }
                 <div className="space-y-4">
                     <h3 className="text-xl font-semibold text-white mb-4">Balances</h3>
                     <div className="bg-gray-900 rounded-xl p-6 space-y-4 shadow-lg">
-                        {[{ mint: 'SOL', symbol: 'SOL', balance: solBalance, logo: "/sol.png" }, ...tokenAccounts].map((token, index) => (
+                        {[{ mint: 'SOL', symbol: 'SOL', uiAmount: Number(solBalance), logo: "/sol.png" }, ...tokenAccounts].map((token, index) => (
                             <div key={index} className="flex items-center justify-between p-2 border-b border-gray-700 last:border-b-0 hover:bg-gray-800 transition duration-150 ease-in-out rounded-md">
                                 <div className="flex items-center space-x-3 flex-grow">
                                     <img src={token.logo} alt={token.symbol} className="w-8 h-8 rounded-full" />
                                     <span className="text-gray-200 font-semibold text-lg truncate">{token.symbol}</span>
                                 </div>
-                                <span className="text-gray-200 font-medium text-base whitespace-nowrap">{token.balance?.toFixed(4) || 'Loading...'}</span>
+                                <span className="text-gray-200 font-medium text-base whitespace-nowrap">{token.uiAmount?.toFixed(4) || 'Loading...'}</span>
                             </div>
                         ))}
                     </div>
@@ -304,12 +266,6 @@ const WalletBalanceManager: React.FC<WalletBalanceManagerProps> = ({ programId }
                     {renderActionForm()}
                 </div>
             </div>
-            {error && (
-                <div className="mt-6 bg-red-900 text-red-200 p-4 rounded-md">
-                    <p className="font-semibold">Error</p>
-                    <p className="text-sm">{error}</p>
-                </div>
-            )}
         </div>
     );
 };

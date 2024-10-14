@@ -1,6 +1,7 @@
 import { Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL, TransactionInstruction } from '@solana/web3.js';
-import { TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, getOrCreateAssociatedTokenAccount, createTransferInstruction, getAssociatedTokenAddress, getAssociatedTokenAddressSync } from '@solana/spl-token';
+import { TOKEN_PROGRAM_ID, createTransferInstruction, getAssociatedTokenAddress, getAssociatedTokenAddressSync, createAssociatedTokenAccountInstruction } from '@solana/spl-token';
 import { serializeWalletInstruction, WalletInstructionType, TransferType } from '../walletInteractions';
+import { ApprovedDapp } from '../store/smartWalletSlice';
 
 export async function depositSol(
     connection: Connection,
@@ -73,25 +74,40 @@ export async function depositToken(
     walletPublicKey: PublicKey,
     tokenMint: PublicKey,
     userATA: PublicKey,
-    amount: number
+    amount: number,
+    decimals: number
 ): Promise<string> {
     const [walletAddress] = PublicKey.findProgramAddressSync(
         [Buffer.from("wallet"), walletPublicKey.toBuffer()],
         programId
     );
 
-    const toTokenAccount = await connection.getTokenAccountsByOwner(walletAddress, { mint: tokenMint });
+    const walletATA = await getAssociatedTokenAddress(tokenMint, walletAddress, true);
 
-    if (toTokenAccount.value.length === 0) {
-        throw new Error("Token account not found in smart wallet");
+    const transaction = new Transaction();
+
+    // Check if the wallet's associated token account exists
+    const walletATAInfo = await connection.getAccountInfo(walletATA);
+
+    if (!walletATAInfo) {
+        // If the account doesn't exist, add an instruction to create it
+        transaction.add(
+            createAssociatedTokenAccountInstruction(
+                walletPublicKey,
+                walletATA,
+                walletAddress,
+                tokenMint
+            )
+        );
     }
 
-    const transaction = new Transaction().add(
+    // Add the transfer instruction
+    transaction.add(
         createTransferInstruction(
             userATA,
-            toTokenAccount.value[0].pubkey,
+            walletATA,
             walletPublicKey,
-            amount * Math.pow(10, 9) // Assuming 9 decimals, adjust if needed
+            amount * Math.pow(10, decimals) // Use the correct number of decimals
         )
     );
 
@@ -108,7 +124,8 @@ export async function withdrawToken(
     walletPublicKey: PublicKey,
     tokenMint: PublicKey,
     userATA: PublicKey,
-    amount: number
+    amount: number,
+    decimals: number
 ): Promise<string> {
     const [walletAddress] = PublicKey.findProgramAddressSync(
         [Buffer.from("wallet"), walletPublicKey.toBuffer()],
@@ -120,7 +137,7 @@ export async function withdrawToken(
     const instructionData = serializeWalletInstruction({
         type: WalletInstructionType.Withdraw,
         data: {
-            amount: BigInt(amount),
+            amount: BigInt(amount * Math.pow(10, decimals)),
             transferType: TransferType.Token
         }
     });
@@ -129,8 +146,9 @@ export async function withdrawToken(
         keys: [
             { pubkey: walletPublicKey, isSigner: true, isWritable: false },
             { pubkey: walletAddress, isSigner: false, isWritable: true },
-            { pubkey: userATA, isSigner: false, isWritable: true },
+            { pubkey: walletPublicKey, isSigner: false, isWritable: true },
             { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+            { pubkey: userATA, isSigner: false, isWritable: true },
             { pubkey: tokenMint, isSigner: false, isWritable: false },
             { pubkey: walletATA, isSigner: false, isWritable: true },
             { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
@@ -194,7 +212,8 @@ export async function sendToken(
     walletPublicKey: PublicKey,
     tokenMint: PublicKey,
     recipientPublicKey: PublicKey,
-    amount: number
+    amount: number,
+    decimals: number
 ): Promise<string> {
     const [walletAddress] = PublicKey.findProgramAddressSync(
         [Buffer.from("wallet"), walletPublicKey.toBuffer()],
@@ -204,10 +223,27 @@ export async function sendToken(
     const walletATA = await getAssociatedTokenAddress(tokenMint, walletAddress, true);
     const recipientATA = await getAssociatedTokenAddress(tokenMint, recipientPublicKey);
 
+    const transaction = new Transaction();
+
+    // Check if the recipient's associated token account exists
+    const recipientATAInfo = await connection.getAccountInfo(recipientATA);
+
+    if (!recipientATAInfo) {
+        // If the account doesn't exist, add an instruction to create it
+        transaction.add(
+            createAssociatedTokenAccountInstruction(
+                walletPublicKey,
+                recipientATA,
+                recipientPublicKey,
+                tokenMint
+            )
+        );
+    }
+
     const instructionData = serializeWalletInstruction({
         type: WalletInstructionType.Withdraw,
         data: {
-            amount: BigInt(amount),
+            amount: BigInt(amount * Math.pow(10, decimals)), // Use the correct number of decimals
             transferType: TransferType.Token
         }
     });
@@ -226,7 +262,7 @@ export async function sendToken(
         data: Buffer.from(instructionData)
     });
 
-    const transaction = new Transaction().add(instruction);
+    transaction.add(instruction);
 
     const { blockhash } = await connection.getLatestBlockhash();
     transaction.recentBlockhash = blockhash;
@@ -234,3 +270,64 @@ export async function sendToken(
 
     return transaction.serialize({ requireAllSignatures: false }).toString('base64');
 }
+
+export async function fetchApprovedDapps(
+    connection: Connection,
+    programId: PublicKey,
+    smartWalletId: PublicKey,
+): Promise<ApprovedDapp[]> {
+    // TODO: 
+    return [];
+}
+
+export const approveDapp = async (
+    connection: Connection,
+    programId: PublicKey,
+    walletPublicKey: PublicKey,
+    dappPublicKey: PublicKey,
+    mintPublicKey: PublicKey,
+    amount: number,
+    expiryTimestamp: number,
+    decimals: number
+): Promise<Transaction> => {
+    const [walletAddress] = PublicKey.findProgramAddressSync(
+        [Buffer.from("wallet"), walletPublicKey.toBuffer()],
+        programId
+    );
+
+    const [approvalAddress] = PublicKey.findProgramAddressSync(
+        [Buffer.from("approval"), walletAddress.toBuffer(), dappPublicKey.toBuffer(), mintPublicKey.toBuffer()],
+        programId
+    );
+
+    const amountBigInt = BigInt(Math.floor(amount * (10 ** decimals)));
+
+    const instructionData = serializeWalletInstruction({
+        type: WalletInstructionType.ApproveDapp,
+        data: {
+            maxAmount: amountBigInt,
+            expiry: expiryTimestamp,
+        }
+    });
+
+    const instruction = new TransactionInstruction({
+        keys: [
+            { pubkey: walletPublicKey, isSigner: true, isWritable: true },
+            { pubkey: walletAddress, isSigner: false, isWritable: false },
+            { pubkey: dappPublicKey, isSigner: false, isWritable: false },
+            { pubkey: mintPublicKey, isSigner: false, isWritable: false },
+            { pubkey: approvalAddress, isSigner: false, isWritable: true },
+            { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+        ],
+        programId,
+        data: Buffer.from(instructionData)
+    });
+
+    const transaction = new Transaction().add(instruction);
+
+    const { blockhash } = await connection.getLatestBlockhash();
+    transaction.recentBlockhash = blockhash;
+    transaction.feePayer = walletPublicKey;
+
+    return transaction;
+};

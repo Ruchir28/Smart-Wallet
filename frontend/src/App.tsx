@@ -1,6 +1,6 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
-import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react';
+import { WalletProvider } from '@solana/wallet-adapter-react';
 import {
     LedgerWalletAdapter,
     PhantomWalletAdapter,
@@ -11,8 +11,11 @@ import {
     WalletModalProvider,
     WalletMultiButton
 } from '@solana/wallet-adapter-react-ui';
+import { Provider } from 'react-redux';
+import store from './store/store';
 import SmartWalletInteractions from './components/SmartWalletInteractions';
 import LandingPage from './components/LandingPage';
+import { getConnectionManager } from './utils/ConnectionManager';
 import './App.css';
 
 import '@solana/wallet-adapter-react-ui/styles.css';
@@ -31,8 +34,14 @@ function App() {
         []
     );
 
+    useEffect(() => {
+        const connectionManager = getConnectionManager();
+        connectionManager.setDefaultEndpoint(endpoint);
+        connectionManager.initializeConnection(endpoint);
+    }, [endpoint]);
+
     return (
-        <ConnectionProvider endpoint={endpoint}>
+        <Provider store={store}>
             <WalletProvider wallets={wallets} autoConnect>
                 <WalletModalProvider>
                     <Router>
@@ -59,7 +68,7 @@ function App() {
                     </Router>
                 </WalletModalProvider>
             </WalletProvider>
-        </ConnectionProvider>
+        </Provider>
     );
 }
 
