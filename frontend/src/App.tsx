@@ -1,9 +1,8 @@
-import React, { useMemo, useEffect } from 'react';
+import  { useMemo, useEffect } from 'react';
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import { WalletProvider } from '@solana/wallet-adapter-react';
 import {
     LedgerWalletAdapter,
-    PhantomWalletAdapter,
     SolflareWalletAdapter,
     TorusWalletAdapter,
 } from '@solana/wallet-adapter-wallets';
@@ -11,22 +10,36 @@ import {
     WalletModalProvider,
     WalletMultiButton
 } from '@solana/wallet-adapter-react-ui';
-import { Provider } from 'react-redux';
-import store from './store/store';
 import SmartWalletInteractions from './components/SmartWalletInteractions';
 import LandingPage from './components/LandingPage';
 import { getConnectionManager } from './utils/ConnectionManager';
 import './App.css';
 
 import '@solana/wallet-adapter-react-ui/styles.css';
+import { useSelector } from 'react-redux';
+import { RootState } from './store/store';
 
 function App() {
-    const network = 'http://127.0.0.1:8899';
-    const endpoint = useMemo(() => network, []);
+
+    const connectionType = useSelector((state: RootState) => state.connection.connectionType);
+
+    const endpoint = useMemo(() => {
+        switch(connectionType) {
+            case 'localnet':
+                return 'http://127.0.0.1:8899';
+            case 'devnet':
+                return 'https://api.devnet.solana.com';
+            case 'testnet':
+                return 'https://api.testnet.solana.com';
+            case 'mainnet-beta':
+                return 'https://api.mainnet-beta.solana.com';
+            default:
+                return 'https://api.devnet.solana.com';
+        }
+    }, [connectionType]);
 
     const wallets = useMemo(
         () => [
-            new PhantomWalletAdapter(),
             new SolflareWalletAdapter(),
             new TorusWalletAdapter(),
             new LedgerWalletAdapter(),
@@ -41,8 +54,7 @@ function App() {
     }, [endpoint]);
 
     return (
-        <Provider store={store}>
-            <WalletProvider wallets={wallets} autoConnect>
+            <WalletProvider autoConnect wallets={wallets}>
                 <WalletModalProvider>
                     <Router>
                         <Routes>
@@ -68,7 +80,6 @@ function App() {
                     </Router>
                 </WalletModalProvider>
             </WalletProvider>
-        </Provider>
     );
 }
 

@@ -1,9 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import {
   createWalletInstruction,
-  executeTransactionInstruction,
-  TransferType,
   serializeWalletInstruction,
 } from '../walletInteractions';
 import { Transaction, PublicKey, SystemProgram, TransactionInstruction } from '@solana/web3.js';
@@ -15,6 +13,8 @@ import { setPublicKey } from '../store/walletSlice';
 import { ConnectionManager } from '../utils/ConnectionManager';
 import ApproveDappForm from './ApproveDappForm';
 import LoadingButton from './LoadingButton';
+import { DateTime } from 'luxon';
+import Loader from './Loader';
 
 const SmartWalletInteractions: React.FC = () => {
   const connection = ConnectionManager.getInstance().getConnection();
@@ -31,11 +31,13 @@ const SmartWalletInteractions: React.FC = () => {
   const [sendType, setSendType] = useState<'SOL' | 'Token'>('SOL');
 
   const hasSmartWallet = useSelector((state: RootState) => state.smartWallet.initialized);
+  const isLoading = useSelector((state: RootState) => state.smartWallet.isLoading);
   const smartWalletId = useSelector((state: RootState) => state.smartWallet.address);
   const approvedDapps = useSelector((state: RootState) => state.smartWallet.approvedDapps);
   const userTokens = useSelector((state: RootState) => state.smartWallet.tokens);
 
-  const PROGRAM_ID = new PublicKey('5UwRT1ngPvSWjUWYcCoRmwVTs5WFUgdDfAW29Ab5XMx2');
+  const program = useSelector((state: RootState) => state.connection.programId);
+  const PROGRAM_ID = useMemo(() => new PublicKey(program), [program]);
 
   const [isCreatingWallet, setIsCreatingWallet] = useState(false);
   const [isSending, setIsSending] = useState(false);
@@ -184,7 +186,7 @@ const SmartWalletInteractions: React.FC = () => {
   const renderBalanceTab = () => (
     <div className="space-y-8">
       <div className="bg-gray-900 bg-opacity-50 rounded-lg p-8 border border-gray-800 shadow-xl">
-        <WalletBalanceManager programId={PROGRAM_ID} onSuccess={(signature: string) => {
+        <WalletBalanceManager onSuccess={(signature: string) => {
           setTxid(signature);
           setError(null);
         }} onError={(errorMessage: string) => {
@@ -213,18 +215,50 @@ const SmartWalletInteractions: React.FC = () => {
       <div className="bg-gray-900 bg-opacity-50 rounded-lg p-8 border border-gray-800 shadow-xl">
         <h2 className="text-2xl font-semibold mb-6 text-white">Approved dApps</h2>
         {approvedDapps.length > 0 ? (
-          <div className="space-y-4">
-            {approvedDapps.map((dapp, index) => (
-              <div key={index} className="bg-gray-700 bg-opacity-50 p-4 rounded-md border border-gray-600">
-                <p className="text-white font-semibold">dApp: {dapp.dapp}</p>
-                <p className="text-gray-300">Token Mint: {dapp.tokenMint}</p>
-                <p className="text-gray-300">Max Amount: {dapp.maxAmount}</p>
-                <p className="text-gray-300">Expiry: {dapp.expiry}</p>
-              </div>
-            ))}
+          <div className="flex flex-wrap -mx-3">
+            {approvedDapps.map((dapp, index) => {
+              const tokenInfo = userTokens.find(token => token.mint === dapp.tokenMint);
+              const decimals = tokenInfo ? tokenInfo.decimals : 9;
+              const maxAmount = parseFloat(dapp.maxAmount) / Math.pow(10, decimals);
+
+              return (
+                <div key={index} className="w-full lg:w-1/2 px-3 mb-6">
+                  <div className="bg-gray-800 rounded-lg p-6 border border-gray-700 shadow-md hover:shadow-lg transition-shadow duration-300 h-full">
+                    <h3 className="text-xl font-semibold text-white mb-4 truncate" title={dapp.dapp}>{dapp.dapp}</h3>
+                    <div className="space-y-3 text-base">
+                      <div className="flex items-center">
+                        <svg className="w-5 h-5 mr-3 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                        <span className="text-gray-300">
+                          <span className="font-medium">Token:</span> {tokenInfo ? tokenInfo.symbol : 'Unknown'}
+                        </span>
+                      </div>
+                      <div className="flex items-center">
+                        <svg className="w-5 h-5 mr-3 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        <span className="text-gray-300">
+                          <span className="font-medium">Max:</span> {maxAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })} {tokenInfo ? tokenInfo.symbol : ''}
+                        </span>
+                      </div>
+                      <div className="flex items-center">
+                        <svg className="w-5 h-5 mr-3 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" /></svg>
+                        <span className="text-gray-300">
+                          <span className="font-medium">Mint:</span> 
+                          <span className="ml-2 break-all">{`${dapp.tokenMint.slice(0, 4)}...${dapp.tokenMint.slice(-4)}`}</span>
+                        </span>
+                      </div>
+                      <div className="flex items-center">
+                        <svg className="w-5 h-5 mr-3 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        <span className="text-gray-300">
+                          <span className="font-medium">Expires:</span> {DateTime.fromISO(dapp.expiry).toRelative()}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         ) : (
-          <p className="text-gray-400 text-center">No approved dApps yet</p>
+          <p className="text-gray-400 text-center py-4">No approved dApps yet</p>
         )}
       </div>
     </div>
@@ -285,10 +319,14 @@ const SmartWalletInteractions: React.FC = () => {
     </div>
   );
 
+  if(isLoading) {
+    return <Loader />
+  }
+
   return (
     <div className="space-y-8">
       {!hasSmartWallet ? (
-        <div className="bg-gray-900 bg-opacity-50 backdrop-filter backdrop-blur-lg rounded-lg p-8 border border-gray-800 shadow-xl">
+        <div className="bg-gray-900 bg-opacity-50 rounded-lg p-8 border border-gray-800 shadow-xl">
           <h2 className="text-3xl font-semibold mb-4 text-white">Create Your Smart Wallet</h2>
           <p className="mb-6 text-gray-300">Get started with your own Smart Wallet to manage digital assets securely.</p>
           <LoadingButton

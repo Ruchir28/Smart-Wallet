@@ -1,8 +1,9 @@
 import { createAsyncThunk, createListenerMiddleware, createSlice } from '@reduxjs/toolkit';
-import { RootState } from './store';
-import { PublicKey, Connection } from '@solana/web3.js';
+import { PublicKey } from '@solana/web3.js';
 import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import { ConnectionManager } from '../utils/ConnectionManager';
+import { setConnection } from './connectionSlice';
+import { RootState } from './store';
 
 interface Token {
     address: string;
@@ -105,5 +106,18 @@ publicKeyListenerMiddlewareWallet.startListening({
     }
 })
 
+export const networkListenerMiddlewareWallet = createListenerMiddleware();
+networkListenerMiddlewareWallet.startListening({
+    actionCreator: setConnection,
+    effect: async (action, listenerApi) => {
+        if (action.payload) {
+            const state = listenerApi.getState() as RootState;
+            const publicKey = state.wallet.publicKey;
+            if (publicKey) {
+                listenerApi.dispatch(fetchTokens(publicKey));
+            }
+        }
+    }
+})
 
 export default walletSlice.reducer;

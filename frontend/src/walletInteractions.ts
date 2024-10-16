@@ -1,5 +1,8 @@
-import { serialize } from "borsh";
+import { serialize, deserialize } from "borsh";
 import { Buffer } from "buffer";
+import { PublicKey } from '@solana/web3.js';
+import { ApprovedDapp } from './store/smartWalletSlice';
+
 // Define the transfer types
 export enum TransferType {
     Sol = 0,
@@ -108,4 +111,30 @@ export function serializeWalletInstruction(instruction: WalletInstruction): Uint
 
     // Concatenate the type and serialized data
     return Buffer.concat([buffer, serializedData]);
+}
+
+// decode dapp data
+export function decodeDappData(dappId: string, data: Uint8Array): ApprovedDapp | null {
+    const decodedData = deserialize(
+        {
+            struct: {
+                is_approved: 'bool',
+                max_amount: 'u64',
+                expiry: 'i64',
+                token_mint: { array: { type: 'u8', len: 32 } },
+            }
+        },
+        Buffer.from(data)
+    ) as { is_approved: boolean; max_amount: bigint; expiry: bigint; token_mint: Uint8Array } | null;
+
+    if (!decodedData) {
+        return null;
+    }
+
+    return {
+        dapp: dappId,
+        tokenMint: new PublicKey(decodedData.token_mint).toString(),
+        maxAmount: decodedData.max_amount.toString(),
+        expiry: new Date(Number(decodedData.expiry) * 1000).toISOString(),
+    };
 }

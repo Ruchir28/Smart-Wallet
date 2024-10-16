@@ -1,6 +1,6 @@
 import { Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL, TransactionInstruction } from '@solana/web3.js';
-import { TOKEN_PROGRAM_ID, createTransferInstruction, getAssociatedTokenAddress, getAssociatedTokenAddressSync, createAssociatedTokenAccountInstruction } from '@solana/spl-token';
-import { serializeWalletInstruction, WalletInstructionType, TransferType } from '../walletInteractions';
+import { TOKEN_PROGRAM_ID, createTransferInstruction, getAssociatedTokenAddress, createAssociatedTokenAccountInstruction } from '@solana/spl-token';
+import { serializeWalletInstruction, WalletInstructionType, TransferType, decodeDappData } from '../walletInteractions';
 import { ApprovedDapp } from '../store/smartWalletSlice';
 
 export async function depositSol(
@@ -276,8 +276,71 @@ export async function fetchApprovedDapps(
     programId: PublicKey,
     smartWalletId: PublicKey,
 ): Promise<ApprovedDapp[]> {
-    // TODO: 
-    return [];
+
+    let approvedDapps: ApprovedDapp[] = [];
+
+    try {
+        const dappIdsResponse = await fetch(`${import.meta.env.VITE_BACKEND_URL}/getDappIds`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ walletKey: smartWalletId.toString() })
+        }).then((resp) => resp.json());
+
+        console.log("dappIdsResponse", dappIdsResponse);
+
+        if(!dappIdsResponse.success) {
+            throw new Error("Failed to fetch approved dapps");
+        }
+
+        const approvals: {
+            dappId: string,
+            mintId: string
+        }[] = dappIdsResponse.approvals;
+
+        for (const approval of approvals) {
+            const dappPublicKey = new PublicKey(approval.dappId);
+            const tokenMint = new PublicKey(approval.mintId);
+            const dapp = await fetchDapp(connection, smartWalletId, dappPublicKey, tokenMint, programId);
+            if (dapp) {
+                approvedDapps.push(dapp);
+            } else {
+                console.warn("Dapp not found");
+            }
+        }
+    } catch (error) {
+        console.error("Error fetching approved dapps:", error);
+        throw error; // Re-throw the error to be handled by the caller
+    }
+
+    return approvedDapps;
+}
+
+export const fetchDapp = async (
+    connection: Connection,
+    userSmartWalletPublicKey: PublicKey,
+    dappPublicKey: PublicKey,
+    tokenMint: PublicKey,
+    programId: PublicKey
+): Promise<ApprovedDapp | null> => {
+
+    const dappPda = PublicKey.findProgramAddressSync([Buffer.from("approval"), userSmartWalletPublicKey.toBuffer(), dappPublicKey.toBuffer(), tokenMint.toBuffer()],  programId);
+
+    // decode dapp data
+    const dappData = await connection.getAccountInfo(dappPda[0]);
+
+    if (!dappData) {
+        return null;
+    }
+
+    const dapp = decodeDappData(dappPublicKey.toString(), dappData.data);
+
+    if (!dapp) {
+        return null;
+    }
+
+    return dapp;
 }
 
 export const approveDapp = async (

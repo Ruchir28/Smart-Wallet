@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { PublicKey, Transaction } from '@solana/web3.js';
 import { getAssociatedTokenAddress } from '@solana/spl-token';
@@ -10,7 +10,6 @@ import LoadingButton from './LoadingButton';
 
 
 interface WalletBalanceManagerProps {
-    programId: PublicKey;
     onSuccess: (signature: string) => void;
     onError: (errorMessage: string) => void;
 }
@@ -24,8 +23,10 @@ interface TokenAccount {
     logo: string;
 }
 
-const WalletBalanceManager: React.FC<WalletBalanceManagerProps> = ({ programId, onSuccess, onError }) => {
+const WalletBalanceManager: React.FC<WalletBalanceManagerProps> = ({ onSuccess, onError }) => {
     const connection  = ConnectionManager.getInstance().getConnection();
+    const program = useSelector((state: RootState) => state.connection.programId);
+    const programId = useMemo(() => new PublicKey(program), [program]);
     const wallet = useWallet();
     const tokenAccounts = useSelector((state: RootState) => state.smartWallet.tokens);
     const userTokenAccounts = useSelector((state: RootState) => state.wallet.tokens);

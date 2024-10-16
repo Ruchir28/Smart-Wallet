@@ -1,14 +1,15 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import { RootState } from './store';
-import { Connection } from '@solana/web3.js';
 type ConnectionType = 'localnet' | 'devnet' | 'testnet' | 'mainnet-beta';
 
 interface ConnectionState {
     connectionType: ConnectionType;
+    programId: string;
 }
 
 const initialState: ConnectionState = {
-    connectionType: 'localnet'
+    connectionType: 'devnet',
+    programId: 'G4rRSg4E9i3hWpHVCioQ3YZDutswuz2PPr1J38EJtzST'
 }
 
 const connectionSlice = createSlice({
@@ -17,6 +18,14 @@ const connectionSlice = createSlice({
     reducers: {
         setConnection: (state, action: PayloadAction<ConnectionType>) => {
             state.connectionType = action.payload;
+            switch(action.payload) {
+                case 'localnet':
+                    state.programId = 'G4rRSg4E9i3hWpHVCioQ3YZDutswuz2PPr1J38EJtzST';
+                    break;
+                case 'devnet':
+                    state.programId = 'G4rRSg4E9i3hWpHVCioQ3YZDutswuz2PPr1J38EJtzST';
+                    break;
+            }
        }
     },
 });

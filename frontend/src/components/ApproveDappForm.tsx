@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store/store';
 import { DateTime } from 'luxon';
@@ -16,7 +16,9 @@ interface ApproveDappFormProps {
 const ApproveDappForm: React.FC<ApproveDappFormProps> = ({ onSuccess, onError }) => {
   const wallet = useWallet();
   const connection = ConnectionManager.getInstance().getConnection();
-  const PROGRAM_ID = new PublicKey('5UwRT1ngPvSWjUWYcCoRmwVTs5WFUgdDfAW29Ab5XMx2');
+  const program = useSelector((state: RootState) => state.connection.programId);
+  const PROGRAM_ID = useMemo(() => new PublicKey(program), [program]);
+  const smartWalletId = useSelector((state: RootState) => state.smartWallet.address);
 
   const [dappToApprove, setDappToApprove] = useState<string>('');
   const [approvalAmount, setApprovalAmount] = useState<string>('');
@@ -88,6 +90,32 @@ const ApproveDappForm: React.FC<ApproveDappFormProps> = ({ onSuccess, onError })
         blockhash: latestBlockhash.blockhash,
         lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
       });
+
+      // Call the API to save the approval
+      try {
+        const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/dapp`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            walletKey: smartWalletId,
+            dAppId: dappPublicKey.toString(),
+            mintId: mintPublicKey.toString(),
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(`API error: ${response.status} ${response.statusText}. ${errorData.message || ''}`);
+        }
+
+        const result = await response.json();
+        console.log('Approval saved successfully:', result);
+      } catch (apiError) {
+        console.error('Error saving approval:', apiError);
+        onError(`Failed to save approval: ${apiError instanceof Error ? apiError.message : String(apiError)}`);
+      }
 
       onSuccess(signature);
       // Reset form fields
