@@ -1,0 +1,92 @@
+name: Deploy Application
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v2
+      with:
+        node-version: '20'
+
+    - name: Install dependencies
+      run: |
+        cd db
+        npm ci
+        cd ../backend
+        npm ci
+        cd ../frontend
+        npm ci
+
+    - name: Create env files
+      run: |
+        echo "DATABASE_URL=${{ secrets.DB_URL }}" > db/.env
+        echo "VITE_BACKEND_URL=${{ secrets.VITE_BACKEND_URL }}" > frontend/.env
+
+    - name: Build applications
+      run: |
+        cd db
+        npm run build
+        cd ../backend
+        npm run build
+        cd ../frontend
+        npm run build
+
+    - name: Setup SSH key
+      env:
+        PRIVATE_KEY: ${{ secrets.SERVER_SSH_PRIVATE_KEY }}
+        PASSPHRASE: ${{ secrets.SSH_PASSPHRASE }}
+      run: |
+        mkdir -p ~/.ssh
+        echo "$PRIVATE_KEY" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        eval $(ssh-agent -s)
+        echo "$PASSPHRASE" | ssh-add ~/.ssh/id_rsa
+
+    - name: Deploy to server
+      env:
+        HOST: ${{ secrets.SERVER_HOST }}
+        USER: ${{ secrets.SERVER_USER }}
+      run: |
+        # Deploy db files
+        scp -o StrictHostKeyChecking=no -r db/dist $USER@$HOST:/workplace/smart_wallet/db/
+        scp -o StrictHostKeyChecking=no db/package.json db/package-lock.json $USER@$HOST:/workplace/smart_wallet/db/
+        scp -o StrictHostKeyChecking=no db/.env $USER@$HOST:/workplace/smart_wallet/db/
+        scp -o StrictHostKeyChecking=no -r db/prisma $USER@$HOST:/workplace/smart_wallet/db/
+
+        # Deploy backend files
+        scp -o StrictHostKeyChecking=no -r backend/dist $USER@$HOST:/workplace/smart_wallet/backend/
+        scp -o StrictHostKeyChecking=no backend/package.json backend/package-lock.json $USER@$HOST:/workplace/smart_wallet/backend/
+
+        # Run Prisma migrations and restart backend
+        ssh -o StrictHostKeyChecking=no $USER@$HOST << 'EOF'
+          # Change to db directory
+          cd /workplace/smart_wallet/db
+          # Run Prisma migrations
+          npx prisma migrate deploy
+          # Install production dependencies
+          npm ci --production
+          # Change to backend directory
+          cd /workplace/smart_wallet/backend
+          # Install production dependencies
+          npm ci --production
+          # Restart the backend application
+          pm2 restart backend-app
+        EOF
+
+        # Deploy frontend files
+        scp -o StrictHostKeyChecking=no -r frontend/dist/* $USER@$HOST:/workplace/smart_wallet/frontend/
+        scp -o StrictHostKeyChecking=no frontend/.env $USER@$HOST:/workplace/smart_wallet/frontend/
+
+    - name: Clean up
+      run: |
+        rm db/.env frontend/.env
