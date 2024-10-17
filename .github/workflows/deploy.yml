@@ -49,6 +49,7 @@ jobs:
         mkdir -p ~/.ssh
         echo "$PRIVATE_KEY" > ~/.ssh/id_rsa
         chmod 600 ~/.ssh/id_rsa
+        ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
         eval $(ssh-agent -s)
         echo "$PASSPHRASE" | ssh-add ~/.ssh/id_rsa
 
@@ -57,8 +58,11 @@ jobs:
         HOST: ${{ secrets.SERVER_HOST }}
         USER: ${{ secrets.SERVER_USER }}
       run: |
+        # Test SSH connection
+        ssh -v -o StrictHostKeyChecking=no $USER@$HOST echo "SSH connection successful"
+
         # Deploy db files
-        scp -o StrictHostKeyChecking=no -r db/dist $USER@$HOST:/workplace/smart_wallet/db/
+        scp -v -o StrictHostKeyChecking=no -r db/dist $USER@$HOST:/workplace/smart_wallet/db/
         scp -o StrictHostKeyChecking=no db/package.json db/package-lock.json $USER@$HOST:/workplace/smart_wallet/db/
         scp -o StrictHostKeyChecking=no db/.env $USER@$HOST:/workplace/smart_wallet/db/
         scp -o StrictHostKeyChecking=no -r db/prisma $USER@$HOST:/workplace/smart_wallet/db/
@@ -69,17 +73,11 @@ jobs:
 
         # Run Prisma migrations and restart backend
         ssh -o StrictHostKeyChecking=no $USER@$HOST << 'EOF'
-          # Change to db directory
           cd /workplace/smart_wallet/db
-          # Run Prisma migrations
           npx prisma migrate deploy
-          # Install production dependencies
           npm ci --production
-          # Change to backend directory
           cd /workplace/smart_wallet/backend
-          # Install production dependencies
           npm ci --production
-          # Restart the backend application
           pm2 restart backend-app
         EOF
 
