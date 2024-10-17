@@ -44,14 +44,13 @@ jobs:
     - name: Setup SSH key
       env:
         PRIVATE_KEY: ${{ secrets.SERVER_SSH_PRIVATE_KEY }}
-        PASSPHRASE: ${{ secrets.SSH_PASSPHRASE }}
       run: |
         mkdir -p ~/.ssh
         echo "$PRIVATE_KEY" > ~/.ssh/id_rsa
         chmod 600 ~/.ssh/id_rsa
         ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
         eval $(ssh-agent -s)
-        echo "$PASSPHRASE" | ssh-add ~/.ssh/id_rsa
+        ssh-add ~/.ssh/id_rsa
 
     - name: Deploy to server
       env:
