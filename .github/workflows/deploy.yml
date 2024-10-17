@@ -51,7 +51,7 @@ jobs:
         ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
         eval $(ssh-agent -s)
         ssh-add ~/.ssh/id_rsa
-
+      
     - name: Deploy to server
       env:
         HOST: ${{ secrets.SERVER_HOST }}
@@ -73,11 +73,16 @@ jobs:
         # Run Prisma migrations and restart backend
         ssh -o StrictHostKeyChecking=no $USER@$HOST << 'EOF'
           cd /workplace/smart_wallet/db
+          npm ci
           npx prisma migrate deploy
-          npm ci --production
           cd /workplace/smart_wallet/backend
-          npm ci --production
-          pm2 restart backend-app
+          npm install
+          if ! command -v pm2 &> /dev/null
+          then
+              echo "pm2 could not be found, installing globally"
+              npm install -g pm2
+          fi
+          pm2 restart backend-app || pm2 start dist/index.js --name backend-app
         EOF
 
         # Deploy frontend files
