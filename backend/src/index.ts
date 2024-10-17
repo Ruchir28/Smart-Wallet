@@ -11,7 +11,8 @@ const frontendUrl = process.env.FRONTEND_URL;
 app.use(cors({
   origin: frontendUrl,
   methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  optionsSuccessStatus: 200
 }));
 
 app.use(express.json());
