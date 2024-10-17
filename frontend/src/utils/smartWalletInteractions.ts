@@ -394,3 +394,34 @@ export const approveDapp = async (
 
     return transaction;
 };
+
+    // const fetchTokenMetadata = async (mintAddress: PublicKey): Promise<{ symbol: string; name: string; logo: string }> => {
+    //     try {
+    //         // Fetch metadata from the Solana Token List
+    //         const response = await fetch('https://cdn.jsdelivr.net/gh/solana-labs/token-list@main/src/tokens/solana.tokenlist.json');
+    //         const tokenList = await response.json();
+            
+    //         const tokenInfo = tokenList.tokens.find((token: any) => token.address === mintAddress.toString());
+            
+    //         if (tokenInfo) {
+    //             return {
+    //                 symbol: tokenInfo.symbol,
+    //                 name: tokenInfo.name,
+    //                 logo: tokenInfo.logoURI || '/unknown-token.svg' // Use unknown-token.svg if logo is not available
+    //             };
+    //         }
+    //         // If token not found, return default values
+    //         return {
+    //             symbol: 'UNKNOWN',
+    //             name: 'Unknown Token',
+    //             logo: '/unknown-token.svg' // Use unknown-token.svg for unknown tokens
+    //         };
+    //     } catch (error) {
+    //         console.error('Error fetching token metadata:', error);
+    //         return {
+    //             symbol: 'ERROR',
+    //             name: 'Error Fetching Token',
+    //             logo: '/unknown-token.svg' // Use unknown-token.svg for errors
+    //         };
+    //     }
+    // };

@@ -14,15 +14,6 @@ interface WalletBalanceManagerProps {
     onError: (errorMessage: string) => void;
 }
 
-interface TokenAccount {
-    mint: string;
-    balance: number;
-    decimals: number;
-    symbol: string;
-    name: string;
-    logo: string;
-}
-
 const WalletBalanceManager: React.FC<WalletBalanceManagerProps> = ({ onSuccess, onError }) => {
     const connection  = ConnectionManager.getInstance().getConnection();
     const program = useSelector((state: RootState) => state.connection.programId);
@@ -39,36 +30,6 @@ const WalletBalanceManager: React.FC<WalletBalanceManagerProps> = ({ onSuccess, 
     const [isDepositing, setIsDepositing] = useState(false);
     const [isWithdrawing, setIsWithdrawing] = useState(false);
   
-    const fetchTokenMetadata = async (mintAddress: PublicKey): Promise<{ symbol: string; name: string; logo: string }> => {
-        try {
-            // Fetch metadata from the Solana Token List
-            const response = await fetch('https://cdn.jsdelivr.net/gh/solana-labs/token-list@main/src/tokens/solana.tokenlist.json');
-            const tokenList = await response.json();
-            
-            const tokenInfo = tokenList.tokens.find((token: any) => token.address === mintAddress.toString());
-            
-            if (tokenInfo) {
-                return {
-                    symbol: tokenInfo.symbol,
-                    name: tokenInfo.name,
-                    logo: tokenInfo.logoURI || '/unknown-token.svg' // Use unknown-token.svg if logo is not available
-                };
-            }
-            // If token not found, return default values
-            return {
-                symbol: 'UNKNOWN',
-                name: 'Unknown Token',
-                logo: '/unknown-token.svg' // Use unknown-token.svg for unknown tokens
-            };
-        } catch (error) {
-            console.error('Error fetching token metadata:', error);
-            return {
-                symbol: 'ERROR',
-                name: 'Error Fetching Token',
-                logo: '/unknown-token.svg' // Use unknown-token.svg for errors
-            };
-        }
-    };
 
     const handleDeposit = async () => {
         if (!wallet.publicKey) {
@@ -172,12 +133,6 @@ const WalletBalanceManager: React.FC<WalletBalanceManagerProps> = ({ onSuccess, 
         }
     };
 
-    const renderTokenOption = (token: TokenAccount) => (
-        <div className="flex items-center space-x-2 p-2 hover:bg-gray-700 cursor-pointer">
-            <img src={token.logo} alt={token.symbol} className="w-6 h-6 rounded-full" />
-            <span className="text-white">{token.symbol}</span>
-        </div>
-    );
 
     const renderActionForm = () => {
         if (!action) return null;
