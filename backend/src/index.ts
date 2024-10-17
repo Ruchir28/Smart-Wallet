@@ -6,7 +6,14 @@ import cors from 'cors';
 const app = express();
 const port = 3000;
 
-app.use(cors());
+const frontendUrl = process.env.FRONTEND_URL;
+
+app.use(cors({
+  origin: frontendUrl,
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
 app.use(express.json());
 
 app.post('/dapp', async (req: Request, res: Response) => {

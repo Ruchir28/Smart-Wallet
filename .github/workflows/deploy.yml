@@ -31,6 +31,7 @@ jobs:
       run: |
         echo "DATABASE_URL=${{ secrets.DB_URL }}" > db/.env
         echo "VITE_BACKEND_URL=${{ secrets.VITE_BACKEND_URL }}" > frontend/.env
+        echo "FRONTEND_URL=${{ secrets.FRONTEND_URL }}" > backend/.env
 
     - name: Build applications
       run: |
@@ -69,6 +70,7 @@ jobs:
         # Deploy backend files
         scp -o StrictHostKeyChecking=no -r backend/dist $USER@$HOST:/workplace/smart_wallet/backend/
         scp -o StrictHostKeyChecking=no backend/package.json backend/package-lock.json $USER@$HOST:/workplace/smart_wallet/backend/
+        scp -o StrictHostKeyChecking=no backend/.env $USER@$HOST:/workplace/smart_wallet/backend/
 
         # Run Prisma migrations and restart backend
         ssh -o StrictHostKeyChecking=no $USER@$HOST << 'EOF'
@@ -91,4 +93,4 @@ jobs:
 
     - name: Clean up
       run: |
-        rm db/.env frontend/.env
+        rm db/.env frontend/.env backend/.env
