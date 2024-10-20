@@ -1,5 +1,5 @@
-import { PrismaClient } from '@prisma/client';
+import { smartWalletClient } from 'db';
 
-const prisma = new PrismaClient();
+const prisma = smartWalletClient;
 
 export default prisma;

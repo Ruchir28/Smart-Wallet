@@ -1,24 +1,9 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient as SmartWalletClient } from '@prisma/client-smart-wallet';
+import { PrismaClient as UserClient } from '@prisma/client-telbot';
 
-// Create a single instance of the Prisma client
-const prisma = new PrismaClient();
 
-// Create an object with database-related functions
-const db: {
-  prisma: PrismaClient;
-  disconnect: () => Promise<void>;
-} = {
-  // Expose the Prisma client instance
-  prisma,
+const smartWalletClient = new SmartWalletClient();
 
-  // Function to disconnect the Prisma client
-  async disconnect(): Promise<void> {
-    await prisma.$disconnect();
-  },
-};
-// Export the db object
-export default db;
+const telbotClient = new UserClient();
 
-// Optionally, export types if needed
-export * from '@prisma/client';
-
+export { smartWalletClient, telbotClient };

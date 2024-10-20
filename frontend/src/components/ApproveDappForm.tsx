@@ -7,7 +7,10 @@ import { approveDapp } from '../utils/smartWalletInteractions';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { ConnectionManager } from '../utils/ConnectionManager';
 import LoadingButton from './LoadingButton';
-
+import { fetchLatestApprovedDapps } from '../store/smartWalletSlice';
+import { useDispatch } from 'react-redux';
+import { ThunkDispatch } from 'redux-thunk';
+import { addNotificationWithTimeout } from '../store/notificationSlice';
 interface ApproveDappFormProps {
   onSuccess: (txid: string) => void;
   onError: (error: string) => void;
@@ -28,7 +31,7 @@ const ApproveDappForm: React.FC<ApproveDappFormProps> = ({ onSuccess, onError })
     DateTime.now().plus({ years: 1 }).toFormat("yyyy-MM-dd'T'HH:mm")
   );
   const [isLoading, setIsLoading] = useState(false);
-
+  const dispatch = useDispatch<ThunkDispatch<RootState, any, any>>();
   const userTokens = useSelector((state: RootState) => state.smartWallet.tokens);
 
   const handleApproveDapp = async () => {
@@ -111,9 +114,24 @@ const ApproveDappForm: React.FC<ApproveDappFormProps> = ({ onSuccess, onError })
         }
 
         const result = await response.json();
+        dispatch(fetchLatestApprovedDapps());
+        dispatch(addNotificationWithTimeout({
+            notification: {
+                message: "Approval saved successfully",
+                type: "success"
+            },
+            timeout: 5000
+        }));
         console.log('Approval saved successfully:', result);
       } catch (apiError) {
         console.error('Error saving approval:', apiError);
+        dispatch(addNotificationWithTimeout({
+            notification: {
+                message: `Failed to save approval`,
+                type: "error"
+            },
+            timeout: 5000
+        }));
         onError(`Failed to save approval: ${apiError instanceof Error ? apiError.message : String(apiError)}`);
       }
 

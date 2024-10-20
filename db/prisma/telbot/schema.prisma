@@ -1,0 +1,18 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../node_modules/@prisma/client-telbot"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("TEL_BOT_DATABASE_URL")
+}
+
+model User {
+    id String @id
+    smartWalletId String @unique
+    publicKey String
+    pinHash String
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+}

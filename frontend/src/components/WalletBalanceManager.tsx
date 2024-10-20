@@ -1,13 +1,17 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { PublicKey, Transaction } from '@solana/web3.js';
 import { getAssociatedTokenAddress } from '@solana/spl-token';
 import { depositSol, withdrawSol, depositToken, withdrawToken } from '../utils/smartWalletInteractions';
 import { ConnectionManager } from '../utils/ConnectionManager';
-import { useSelector } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '../store/store';
 import LoadingButton from './LoadingButton';
-
+import { fetchLatestBalance } from '../store/smartWalletSlice';
+import { ThunkDispatch } from 'redux-thunk';
+import BalanceLoader from './BalanceLoader';
+import NotificationManager from './NotificationManager';
+import { addNotificationWithTimeout } from '../store/notificationSlice';
 
 interface WalletBalanceManagerProps {
     onSuccess: (signature: string) => void;
@@ -29,11 +33,21 @@ const WalletBalanceManager: React.FC<WalletBalanceManagerProps> = ({ onSuccess, 
     const [action, setAction] = useState<'deposit' | 'withdraw' | null>(null);
     const [isDepositing, setIsDepositing] = useState(false);
     const [isWithdrawing, setIsWithdrawing] = useState(false);
-  
+    const isLoadingBalance = useSelector((state: RootState) => state.smartWallet.loadingBalance);
+    const dispatch = useDispatch<ThunkDispatch<RootState, any, any>>();
+    const showNotification = useCallback((message: string, type: 'success' | 'error') => {
+        dispatch(addNotificationWithTimeout({
+            notification: {
+                message,
+                type
+            },
+            timeout: 5000
+        }));
+    }, [dispatch]);
 
     const handleDeposit = async () => {
         if (!wallet.publicKey) {
-            onError("Wallet not connected");
+            showNotification("Wallet not connected", "error");
             return;
         }
 
@@ -67,8 +81,9 @@ const WalletBalanceManager: React.FC<WalletBalanceManagerProps> = ({ onSuccess, 
                 });
 
                 console.log(`Deposit successful. Transaction signature: ${signature}`);
+                showNotification(`Deposit successful. Transaction signature: ${signature}`, "success");
                 onSuccess(signature);
-                // fetchBalances();
+                dispatch(fetchLatestBalance());
                 setDepositAmount('');
             } else {
                 console.error('Wallet does not support signing transactions');
@@ -76,6 +91,7 @@ const WalletBalanceManager: React.FC<WalletBalanceManagerProps> = ({ onSuccess, 
             }
         } catch (err) {
             console.error('Error depositing:', err);
+            showNotification(`Failed to deposit: ${err instanceof Error ? err.message : String(err)}`, "error");
             onError(`Failed to deposit: ${err instanceof Error ? err.message : String(err)}`);
         } finally {
             setIsDepositing(false);
@@ -84,7 +100,7 @@ const WalletBalanceManager: React.FC<WalletBalanceManagerProps> = ({ onSuccess, 
 
     const handleWithdraw = async () => {
         if (!wallet.publicKey) {
-            onError("Wallet not connected");
+            showNotification("Wallet not connected", "error");
             return;
         }
 
@@ -118,21 +134,22 @@ const WalletBalanceManager: React.FC<WalletBalanceManagerProps> = ({ onSuccess, 
                 });
 
                 console.log(`Withdrawal successful. Transaction signature: ${signature}`);
-                // fetchBalances();
+                showNotification(`Withdrawal successful. Transaction signature: ${signature}`, "success");
                 setWithdrawAmount('');
                 onSuccess(signature);
+                dispatch(fetchLatestBalance());
             } else {
                 console.error('Wallet does not support signing transactions');
                 onError("Wallet does not support signing transactions");
             }
         } catch (err) {
             console.error('Error withdrawing:', err);
+            showNotification(`Failed to withdraw: ${err instanceof Error ? err.message : String(err)}`, "error");
             onError(`Failed to withdraw: ${err instanceof Error ? err.message : String(err)}`);
         } finally {
             setIsWithdrawing(false);
         }
     };
-
 
     const renderActionForm = () => {
         if (!action) return null;
@@ -187,20 +204,27 @@ const WalletBalanceManager: React.FC<WalletBalanceManagerProps> = ({ onSuccess, 
 
     return (
         <div className="bg-gray-900 rounded-lg p-6 shadow-xl">
+            <NotificationManager/>
+            {/* demo button to show notification */}
+            <button onClick={() => showNotification("This is a long notification message that demonstrates how the component handles overflow. It should be truncated initially and expandable when clicked.", "success")}>Show Long Notification</button>
             <h2 className="text-2xl font-bold text-white mb-6">Wallet Balance Manager</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div className="space-y-4">
                     <h3 className="text-xl font-semibold text-white mb-4">Balances</h3>
                     <div className="bg-gray-900 rounded-xl p-6 space-y-4 shadow-lg">
-                        {[{ mint: 'SOL', symbol: 'SOL', uiAmount: Number(solBalance), logo: "/sol.png" }, ...tokenAccounts].map((token, index) => (
-                            <div key={index} className="flex items-center justify-between p-2 border-b border-gray-700 last:border-b-0 hover:bg-gray-800 transition duration-150 ease-in-out rounded-md">
-                                <div className="flex items-center space-x-3 flex-grow">
-                                    <img src={token.logo} alt={token.symbol} className="w-8 h-8 rounded-full" />
-                                    <span className="text-gray-200 font-semibold text-lg truncate">{token.symbol}</span>
+                        {isLoadingBalance ? (
+                            <BalanceLoader />
+                        ) : (
+                            [{ mint: 'SOL', symbol: 'SOL', uiAmount: Number(solBalance), logo: "/sol.png" }, ...tokenAccounts].map((token, index) => (
+                                <div key={index} className="flex items-center justify-between p-2 border-b border-gray-700 last:border-b-0 hover:bg-gray-800 transition duration-150 ease-in-out rounded-md">
+                                    <div className="flex items-center space-x-3 flex-grow">
+                                        <img src={token.logo} alt={token.symbol} className="w-8 h-8 rounded-full" />
+                                        <span className="text-gray-200 font-semibold text-lg truncate">{token.symbol}</span>
+                                    </div>
+                                    <span className="text-gray-200 font-medium text-base whitespace-nowrap">{token.uiAmount?.toFixed(4) || 'Loading...'}</span>
                                 </div>
-                                <span className="text-gray-200 font-medium text-base whitespace-nowrap">{token.uiAmount?.toFixed(4) || 'Loading...'}</span>
-                            </div>
-                        ))}
+                            ))
+                        )}
                     </div>
                 </div>
                 <div className="space-y-6">

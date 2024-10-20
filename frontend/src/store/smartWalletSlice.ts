@@ -5,9 +5,10 @@ import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import { fetchApprovedDapps } from '../utils/smartWalletInteractions';
 import { setPublicKey } from './walletSlice';
 import { ConnectionManager } from '../utils/ConnectionManager';
-import { RootState } from './store';
+import {  RootState } from './store';
 import { setConnection } from './connectionSlice';
 import { Connection } from '@solana/web3.js';
+import { addNotificationWithTimeout } from './notificationSlice';
 
 export interface Token {
     address: string;
@@ -35,7 +36,8 @@ interface SmartWalletState {
     isLoading: boolean;
     error: string | null;
     approvedDapps: ApprovedDapp[];
-    // transactions: []; TODO:
+    loadingBalance: boolean;
+    loadingApprovedDapps: boolean;
 }
 
 const initialState: SmartWalletState = {
@@ -46,6 +48,8 @@ const initialState: SmartWalletState = {
     isLoading: false,
     error: null,
     approvedDapps: [],
+    loadingBalance: false,
+    loadingApprovedDapps: false,
 };
 
 
@@ -145,6 +149,53 @@ export const fetchSmartWallet = createAsyncThunk(
     }
 );
 
+export const fetchLatestBalance = createAsyncThunk(
+    'smartWallet/fetchLatestBalance',
+    async (_ , thunkApi) => {
+        const state = thunkApi.getState() as RootState;
+        const connection = ConnectionManager.getInstance().getConnection();
+        const smartWalletAddress = state.smartWallet.address;
+        if (!smartWalletAddress) {
+            thunkApi.dispatch(addNotificationWithTimeout({
+                notification: {
+                    message: "Smart wallet address is not set",
+                    type: "error"
+                },
+                timeout: 5000
+            }));
+            throw new Error("Smart wallet address is not set");
+        }
+        const balance = await connection.getBalance(new PublicKey(smartWalletAddress));
+        // fetch tokens
+        const tokens = await connection.getParsedTokenAccountsByOwner(new PublicKey(smartWalletAddress), { programId: TOKEN_PROGRAM_ID });
+        return {
+            balance: (balance / LAMPORTS_PER_SOL).toString(),
+            tokens: tokens.value.map(processTokenAccount)
+        };
+    }
+);
+
+export const fetchLatestApprovedDapps = createAsyncThunk(
+    'smartWallet/fetchLatestApprovedDapps',
+    async (_ , thunkApi) => {
+        const state = thunkApi.getState() as RootState;
+        const connection = ConnectionManager.getInstance().getConnection();
+        const smartWalletAddress = state.smartWallet.address;
+        if (!smartWalletAddress) {
+            thunkApi.dispatch(addNotificationWithTimeout({
+                notification: {
+                    message: "Smart wallet address is not set",
+                    type: "error"
+                },
+                timeout: 5000
+            }));
+            throw new Error("Smart wallet address is not set");
+        }
+        const approvedDapps = await fetchApprovedDapps(connection, new PublicKey(state.connection.programId), new PublicKey(smartWalletAddress));
+        return approvedDapps;
+    }
+);
+
 const smartWalletSlice = createSlice({
     name: 'smartwallet',
     initialState,
@@ -165,6 +216,8 @@ const smartWalletSlice = createSlice({
             .addCase(fetchSmartWallet.pending, (state) => {
                 state.isLoading = true;
                 state.error = null;
+                state.loadingBalance = true;
+                state.loadingApprovedDapps = true;
             })
             .addCase(fetchSmartWallet.fulfilled, (state, action) => {
                 state.isLoading = false;
@@ -173,10 +226,39 @@ const smartWalletSlice = createSlice({
                 state.tokens = action.payload.tokens;
                 state.initialized = action.payload.initialized;
                 state.approvedDapps = action.payload.approvedDapps;
+                state.loadingBalance = false;
+                state.loadingApprovedDapps = false;
             })
             .addCase(fetchSmartWallet.rejected, (state, action) => {
                 state.isLoading = false;
                 state.error = action.error.message || null;
+                state.loadingBalance = false;
+                state.loadingApprovedDapps = false;
+            })
+            .addCase(fetchLatestBalance.pending, (state) => {
+                state.error = null;
+                state.loadingBalance = true;
+            })
+            .addCase(fetchLatestBalance.fulfilled, (state, action) => {
+                state.balance = action.payload.balance;
+                state.tokens = action.payload.tokens;
+                state.loadingBalance = false;
+            })
+            .addCase(fetchLatestBalance.rejected, (state, action) => {
+                state.error = action.error.message || null;
+                state.loadingBalance = false;
+            })
+            .addCase(fetchLatestApprovedDapps.pending, (state) => {
+                state.error = null;
+                state.loadingApprovedDapps = true;
+            })
+            .addCase(fetchLatestApprovedDapps.fulfilled, (state, action) => {
+                state.approvedDapps = action.payload;
+                state.loadingApprovedDapps = false;
+            })
+            .addCase(fetchLatestApprovedDapps.rejected, (state, action) => {
+                state.error = action.error.message || null;
+                state.loadingApprovedDapps = false;
             })
     },
 });
@@ -209,6 +291,7 @@ export const {
     setLoading,
     setError,
     setAddress,
+    
 } = smartWalletSlice.actions;
 
 

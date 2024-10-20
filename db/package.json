@@ -2,10 +2,14 @@
   "name": "db",
   "version": "1.0.0",
   "description": "",
-  "main": "dist/index.js",
+  "main": "dist/index.js",  
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc"
+    "build": "tsc",
+    "generate:smartwallet": "prisma generate --schema=./prisma/smartwallet/schema.prisma",
+    "generate:telbot": "prisma generate --schema=./prisma/telbot/schema.prisma",
+    "migrate:smartwallet": "prisma migrate dev --schema=./prisma/smartwallet/schema.prisma",
+    "migrate:telbot": "prisma migrate dev --schema=./prisma/telbot/schema.prisma"
   },
   "keywords": [],
   "author": "",

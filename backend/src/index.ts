@@ -2,11 +2,16 @@ import express from 'express';
 import { Request, Response } from 'express';
 import prisma from './db';
 import cors from 'cors';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const app = express();
 const port = 3000;
 
 const frontendUrl = process.env.FRONTEND_URL;
+
+console.log("frontendUrl", frontendUrl);
 
 app.use(cors({
   origin: frontendUrl,

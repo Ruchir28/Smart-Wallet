@@ -15,6 +15,9 @@ import ApproveDappForm from './ApproveDappForm';
 import LoadingButton from './LoadingButton';
 import { DateTime } from 'luxon';
 import Loader from './Loader';
+import TelegramBotDemo from './TelegramBotDemo';
+
+
 
 const SmartWalletInteractions: React.FC = () => {
   const connection = ConnectionManager.getInstance().getConnection();
@@ -23,7 +26,7 @@ const SmartWalletInteractions: React.FC = () => {
 
   const [txid, setTxid] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'balance' | 'approve' | 'send'>('balance');
+  const [activeTab, setActiveTab] = useState<'balance' | 'approve' | 'send' | 'telegram'>('balance');
 
   const [sendAmount, setSendAmount] = useState<string>('');
   const [sendRecipient, setSendRecipient] = useState<string>('');
@@ -319,6 +322,10 @@ const SmartWalletInteractions: React.FC = () => {
     </div>
   );
 
+  const renderTelegramTab = () => (
+    <TelegramBotDemo />
+  );
+
   if(isLoading) {
     return <Loader />
   }
@@ -386,12 +393,19 @@ const SmartWalletInteractions: React.FC = () => {
               >
                 Send
               </button>
+              <button
+                onClick={() => setActiveTab('telegram')}
+                className={`px-4 py-2 rounded-md ${activeTab === 'telegram' ? 'bg-white text-black' : 'bg-gray-700 text-white'}`}
+              >
+                Telegram Bot
+              </button>
             </div>
           </div>
 
           {activeTab === 'balance' && renderBalanceTab()}
           {activeTab === 'approve' && renderApproveTab()}
           {activeTab === 'send' && renderSendTab()}
+          {activeTab === 'telegram' && renderTelegramTab()}
         </>
       )}
     </div>

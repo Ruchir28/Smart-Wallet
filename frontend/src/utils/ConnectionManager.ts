@@ -25,7 +25,7 @@ export class ConnectionManager {
 
   public initializeConnection(endpoint: string, commitment: Commitment = 'confirmed'): void {
     if (this.connection && this.currentEndpoint === endpoint) {
-      return; // Connection already initialized with the same endpoint
+      return;
     }
 
     this.connection = new Connection(endpoint, commitment);
