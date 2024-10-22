@@ -26,6 +26,8 @@ jobs:
         npm ci
         cd ../frontend
         npm ci
+        cd ../smartWalletTelBot
+        npm ci
 
     - name: Create env files
       run: |
