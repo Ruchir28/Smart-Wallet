@@ -69,18 +69,21 @@ jobs:
         ssh -v -o StrictHostKeyChecking=no $USER@$HOST echo "SSH connection successful"
 
         # Deploy db files
-        scp -v -o StrictHostKeyChecking=no -r db/dist $USER@$HOST:/workplace/smart_wallet/db/
+        ssh -o StrictHostKeyChecking=no $USER@$HOST 'mkdir -p /workplace/smart_wallet/db/dist'  
+        scp -o StrictHostKeyChecking=no -r db/dist/* $USER@$HOST:/workplace/smart_wallet/db/dist/
         scp -o StrictHostKeyChecking=no db/package.json db/package-lock.json $USER@$HOST:/workplace/smart_wallet/db/
         scp -o StrictHostKeyChecking=no db/.env $USER@$HOST:/workplace/smart_wallet/db/
         scp -o StrictHostKeyChecking=no -r db/prisma $USER@$HOST:/workplace/smart_wallet/db/
 
         # Deploy smartWalletTelBot files
-        scp -o StrictHostKeyChecking=no -r smartWalletTelBot/dist $USER@HOST:/workplace/smart_wallet/smartWalletTelBot/
-        scp -o StrictHostKeyChecking=no smartWalletTelBot/package.json smartWalletTelBot/package-lock.json $USER@HOST:/workplace/smart_wallet/smartWalletTelBot/
-        scp -o StrictHostKeyChecking=no smartWalletTelBot/.env $USER@HOST:/workplace/smart_wallet/smartWalletTelBot/
+        ssh -o StrictHostKeyChecking=no $USER@$HOST 'mkdir -p /workplace/smart_wallet/smartWalletTelBot/dist'
+        scp -o StrictHostKeyChecking=no -r smartWalletTelBot/dist/* $USER@$HOST:/workplace/smart_wallet/smartWalletTelBot/dist/
+        scp -o StrictHostKeyChecking=no smartWalletTelBot/package.json smartWalletTelBot/package-lock.json $USER@$HOST:/workplace/smart_wallet/smartWalletTelBot/
+        scp -o StrictHostKeyChecking=no smartWalletTelBot/.env $USER@$HOST:/workplace/smart_wallet/smartWalletTelBot/
 
         # Deploy backend files
-        scp -o StrictHostKeyChecking=no -r backend/dist $USER@$HOST:/workplace/smart_wallet/backend/
+        ssh -o StrictHostKeyChecking=no $USER@$HOST 'mkdir -p /workplace/smart_wallet/backend/dist'
+        scp -o StrictHostKeyChecking=no -r backend/dist/* $USER@$HOST:/workplace/smart_wallet/backend/dist/
         scp -o StrictHostKeyChecking=no backend/package.json backend/package-lock.json $USER@$HOST:/workplace/smart_wallet/backend/
         scp -o StrictHostKeyChecking=no backend/.env $USER@$HOST:/workplace/smart_wallet/backend/
 
