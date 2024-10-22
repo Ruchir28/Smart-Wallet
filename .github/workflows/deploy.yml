@@ -75,6 +75,9 @@ jobs:
         scp -o StrictHostKeyChecking=no db/package.json db/package-lock.json $USER@$HOST:/workplace/smart_wallet/db/
         scp -o StrictHostKeyChecking=no db/.env $USER@$HOST:/workplace/smart_wallet/db/
         scp -o StrictHostKeyChecking=no -r db/prisma $USER@$HOST:/workplace/smart_wallet/db/
+        # Extract BOT_KEYPAIR from environment variable and write to bot_keypair.json
+        echo "${{ secrets.BOT_KEYPAIR }}" > smartWalletTelBot/bot_keypair.json
+        scp -o StrictHostKeyChecking=no smartWalletTelBot/bot_keypair.json $USER@$HOST:/workplace/smart_wallet/smartWalletTelBot/bot_keypair.json
 
         # Deploy smartWalletTelBot files
         ssh -o StrictHostKeyChecking=no $USER@$HOST 'mkdir -p /workplace/smart_wallet/smartWalletTelBot/dist'
@@ -118,4 +121,4 @@ jobs:
 
     - name: Clean up
       run: |
-        rm db/.env frontend/.env backend/.env
+        rm db/.env frontend/.env backend/.env smartWalletTelBot/.env smartWalletTelBot/bot_keypair.json
