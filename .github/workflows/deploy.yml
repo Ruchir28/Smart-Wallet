@@ -36,6 +36,7 @@ jobs:
         echo "VITE_BACKEND_URL=${{ secrets.VITE_BACKEND_URL }}" > frontend/.env
         echo "FRONTEND_URL=${{ secrets.FRONTEND_URL }}" > backend/.env
         echo "BOT_TOKEN=${{ secrets.BOT_TOKEN }}" > smartWalletTelBot/.env
+        echo "PROGRAM_ID=${{ secrets.PROGRAM_ID }}" > smartWalletTelBot/.env
 
     - name: Build applications
       run: |
