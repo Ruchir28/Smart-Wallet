@@ -6,6 +6,7 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
+    "generate": "npm run generate:smartwallet && npm run generate:telbot",
     "generate:smartwallet": "prisma generate --schema=./prisma/smartwallet/schema.prisma",
     "generate:telbot": "prisma generate --schema=./prisma/telbot/schema.prisma",
     "migrate:smartwallet": "prisma migrate dev --schema=./prisma/smartwallet/schema.prisma",
