@@ -34,6 +34,7 @@ jobs:
         echo "DATABASE_URL=${{ secrets.DB_URL }}" >> db/.env
         echo "TEL_BOT_DATABASE_URL=${{ secrets.TEL_BOT_DATABASE_URL }}" >> db/.env
         echo "VITE_BACKEND_URL=${{ secrets.VITE_BACKEND_URL }}" > frontend/.env
+        echo "VITE_TELEGRAM_BOT_SERVER_URL=${{ secrets.VITE_TELEGRAM_BOT_SERVER_URL }}" >> frontend/.env
         echo "FRONTEND_URL=${{ secrets.FRONTEND_URL }}" > backend/.env
         echo "BOT_TOKEN=${{ secrets.BOT_TOKEN }}" > smartWalletTelBot/.env
         echo "PROGRAM_ID=${{ secrets.PROGRAM_ID }}" >> smartWalletTelBot/.env
