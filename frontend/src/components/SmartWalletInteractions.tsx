@@ -7,7 +7,7 @@ import {
 import { Transaction, PublicKey, SystemProgram, TransactionInstruction } from '@solana/web3.js';
 import WalletBalanceManager from './WalletBalanceManager';
 import { sendSol, sendToken } from '../utils/smartWalletInteractions';
-import { RootState } from '../store/store';
+import { AppDispatch, RootState } from '../store/store';
 import { useDispatch, useSelector } from 'react-redux';
 import { setPublicKey } from '../store/walletSlice';
 import { ConnectionManager } from '../utils/ConnectionManager';
@@ -16,13 +16,15 @@ import LoadingButton from './LoadingButton';
 import { DateTime } from 'luxon';
 import Loader from './Loader';
 import TelegramBotDemo from './TelegramBotDemo';
+import { fetchSmartWallet } from '../store/smartWalletSlice';
+import { addNotificationWithTimeout } from '../store/notificationSlice';
 
 
 
 const SmartWalletInteractions: React.FC = () => {
   const connection = ConnectionManager.getInstance().getConnection();
   const wallet = useWallet();
-  const dispatch = useDispatch();
+  const dispatch = useDispatch<AppDispatch>();
 
   const [txid, setTxid] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -46,10 +48,10 @@ const SmartWalletInteractions: React.FC = () => {
   const [isSending, setIsSending] = useState(false);
 
   useEffect(() => {
-    if(wallet.publicKey) {
+    if (wallet.publicKey) {
       dispatch(setPublicKey(wallet.publicKey.toString()));
     }
-  },[wallet.publicKey]);
+  }, [wallet.publicKey]);
 
   const handleCreateWallet = async () => {
     if (!wallet.publicKey) {
@@ -86,7 +88,7 @@ const SmartWalletInteractions: React.FC = () => {
       });
 
       const latestBlockhash = await connection.getLatestBlockhash();
-      
+
       const transaction = new Transaction().add(createWalletIx);
       transaction.feePayer = wallet.publicKey;
       transaction.recentBlockhash = latestBlockhash.blockhash;
@@ -109,10 +111,28 @@ const SmartWalletInteractions: React.FC = () => {
 
       console.log('Transaction confirmed');
       setTxid(signature);
+      // dispatch notfication
+      dispatch(addNotificationWithTimeout({
+        notification: {
+          message: "Smart Wallet created",
+          type: "success"
+        },
+        timeout: 5000
+      }));
+      // dispatch fetch smart wallet
+      dispatch(fetchSmartWallet(wallet.publicKey.toString()));
       setError(null);
     } catch (err) {
       console.error('Error creating wallet:', err);
       setError(`Failed to create wallet: ${err instanceof Error ? err.message : String(err)}`);
+      // dispatch notfication
+      dispatch(addNotificationWithTimeout({
+        notification: {
+          message: `Failed to create wallet: ${err instanceof Error ? err.message : String(err)}`,
+          type: "error"
+        },
+        timeout: 5000
+      }));
     } finally {
       setIsCreatingWallet(false);
     }
@@ -244,7 +264,7 @@ const SmartWalletInteractions: React.FC = () => {
                       <div className="flex items-center">
                         <svg className="w-5 h-5 mr-3 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" /></svg>
                         <span className="text-gray-300">
-                          <span className="font-medium">Mint:</span> 
+                          <span className="font-medium">Mint:</span>
                           <span className="ml-2 break-all">{`${dapp.tokenMint.slice(0, 4)}...${dapp.tokenMint.slice(-4)}`}</span>
                         </span>
                       </div>
@@ -326,7 +346,7 @@ const SmartWalletInteractions: React.FC = () => {
     <TelegramBotDemo />
   );
 
-  if(isLoading) {
+  if (isLoading) {
     return <Loader />
   }
 
@@ -346,28 +366,28 @@ const SmartWalletInteractions: React.FC = () => {
         </div>
       ) : (
         <>
-            {txid && (
-              <div className="bg-green-900 bg-opacity-50 text-green-200 p-6 rounded-lg border border-green-700 shadow-xl relative">
-                <button onClick={() => setTxid('')} className="absolute top-2 right-2 text-green-200 hover:text-white">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-                <h3 className="text-xl font-semibold mb-2">Transaction Successful</h3>
-                <p className="text-sm break-all">ID: {txid}</p>
-              </div>
-            )}
-            {error && (
-              <div className="bg-red-900 bg-opacity-50 text-red-200 p-6 rounded-lg border border-red-700 shadow-xl relative">
-                <button onClick={() => setError('')} className="absolute top-2 right-2 text-red-200 hover:text-white">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-                <h3 className="text-xl font-semibold mb-2">Error</h3>
-                <p className="text-sm">{error}</p>
-              </div>
-            )}
+          {txid && (
+            <div className="bg-green-900 bg-opacity-50 text-green-200 p-6 rounded-lg border border-green-700 shadow-xl relative">
+              <button onClick={() => setTxid('')} className="absolute top-2 right-2 text-green-200 hover:text-white">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+              <h3 className="text-xl font-semibold mb-2">Transaction Successful</h3>
+              <p className="text-sm break-all">ID: {txid}</p>
+            </div>
+          )}
+          {error && (
+            <div className="bg-red-900 bg-opacity-50 text-red-200 p-6 rounded-lg border border-red-700 shadow-xl relative">
+              <button onClick={() => setError('')} className="absolute top-2 right-2 text-red-200 hover:text-white">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+              <h3 className="text-xl font-semibold mb-2">Error</h3>
+              <p className="text-sm">{error}</p>
+            </div>
+          )}
           <div className="bg-gray-900 bg-opacity-50 rounded-lg p-8 border border-gray-800 shadow-xl">
             <h2 className="text-2xl font-semibold mb-4 text-white">Smart Wallet Information</h2>
             <p className="text-gray-300">Smart Wallet ID: {smartWalletId}</p>

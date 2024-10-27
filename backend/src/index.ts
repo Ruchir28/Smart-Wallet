@@ -26,50 +26,49 @@ app.post('/dapp', async (req: Request, res: Response) => {
   try {
     const { walletKey, dAppId, mintId } = req.body;
 
-    const user = await prisma.user.findUnique({
-      where: {
-        walletKey
-      }
-    });
+    if (!walletKey || !dAppId || !mintId) {
+      res.status(400).json({ success: false, error: 'Missing required fields' });
+      return;
+    }
 
-    if (!user) {
-      const newUser = await prisma.user.create({
-        data: {
-          walletKey,
-          approvals: {
-            create: {
-              dappId: dAppId,
-              mintId: mintId
-            }
-          }
-        }
+    // Use a transaction for atomicity
+    const result = await prisma.$transaction(async (prisma) => {
+      const user = await prisma.user.upsert({
+        where: { walletKey },
+        update: {},
+        create: { walletKey },
       });
-      res.json(newUser);
-    } else {
-      // Check if approval already exists
-      const existingApproval = await prisma.approval.findUnique({
+
+      const approval = await prisma.approval.upsert({
         where: {
           userId_dappId_mintId: {
             userId: user.id,
             dappId: dAppId,
-            mintId: mintId
-          }
-        }
+            mintId: mintId,
+          },
+        },
+        update: {},
+        create: {
+          userId: user.id,
+          dappId: dAppId,
+          mintId: mintId,
+        },
       });
 
-      if (!existingApproval) {
-        await prisma.approval.create({
-          data: {
-            userId: user.id,
-            dappId: dAppId,
-            mintId: mintId
-          }
-        });
-      }
-    }
-    res.json({ success: true });
+      return { user, approval };
+    });
+
+    console.log(`Approval created/updated for wallet ${walletKey}`, { dAppId, mintId });
+    res.json({
+      success: true,
+      message: 'Approval processed successfully',
+      data: {
+        userId: result.user.id,
+        approvalId: result.approval.id,
+      },
+    });
   } catch (error) {
-    console.error(error);
+    console.error('Internal server error');
     res.status(500).json({ success: false, error: "Internal server error" });
   }
 });

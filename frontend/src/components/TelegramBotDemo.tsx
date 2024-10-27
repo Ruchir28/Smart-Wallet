@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '../store/store';
 import { PublicKey } from '@solana/web3.js';
@@ -10,6 +10,14 @@ import { DateTime } from 'luxon';
 import { fetchLatestApprovedDapps } from '../store/smartWalletSlice';
 import { ThunkDispatch } from 'redux-thunk';
 import { addNotificationWithTimeout } from '../store/notificationSlice';
+import { fetchSmartWalletInfo, linkSmartWallet, setTelegramUser, TelegramUser } from '../store/telegramSlice';
+import TelegramLoginButton from './TelegramLoginButton';
+
+declare global {
+    interface Window {
+        onTelegramAuth: (user: TelegramUser) => void;
+    }
+}
 
 const TelegramBotDemo: React.FC = () => {
     const wallet = useWallet();
@@ -29,12 +37,126 @@ const TelegramBotDemo: React.FC = () => {
     const program = useSelector((state: RootState) => state.connection.programId);
     const PROGRAM_ID = useMemo(() => new PublicKey(program), [program]);
 
+    const telegramUser = useSelector((state: RootState) => state.telegram.telegramUser);
+    const smartWalletInfo = useSelector((state: RootState) => state.telegram.smartWalletInfo);
+    const loading = useSelector((state: RootState) => state.telegram.loading);
+    const isLinking = useSelector((state: RootState) => state.telegram.isLinking);
+
     const isTelegramBotApproved = approvedDapps.some(dapp => dapp.dapp === 'CXia64u8Ku8pYkun12Au4mtd3bfqYGhd6sSQC6H84WXW');
     const telegramBotPublicKey = 'CXia64u8Ku8pYkun12Au4mtd3bfqYGhd6sSQC6H84WXW';
 
+    // Add this useEffect first to check wallet connection
+    useEffect(() => {
+        dispatch(fetchSmartWalletInfo());
+    }, [smartWalletId]);
+
+    // Modify Step 1 and 2 in the steps array
     const steps = [
-        { // Step 1: Searching for the bot in Telegram.
+        { // Step 1: Connect with Telegram
             number: '1',
+            title: 'Connect your Telegram account',
+            description: (
+                <div className="mt-2">
+                    {loading && (
+                        <p className="text-gray-400">Checking wallet connection...</p>
+                    )}
+                    
+                    {smartWalletInfo && (
+                        <div className="bg-green-900 bg-opacity-50 p-4 rounded-lg">
+                            <p className="text-green-400">✓ Already connected to Telegram</p>
+                            <p className="text-sm text-gray-300">Name: {smartWalletInfo.telegramUsername}</p>
+                        </div>
+                    )}
+                    
+                    {(!smartWalletInfo) && telegramUser && (
+                        <div className="bg-gray-800 p-4 rounded-lg">
+                            <div className="flex items-center justify-center gap-4">
+                                {telegramUser.photo_url && (
+                                    <img 
+                                        src={telegramUser.photo_url} 
+                                        alt="Profile" 
+                                        className="w-10 h-10 rounded-full"
+                                    />
+                                )}
+                                 <div className="flex flex-col items-center">
+                                    <p className="text-green-400">✓ Connected as {telegramUser.first_name}</p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                    
+                    {/* Render TelegramLoginButton only if not connected */}
+                    {!smartWalletInfo && !telegramUser && <TelegramLoginButton />}
+                </div>
+            ),
+        },
+        { // Step 2: Link Smart Wallet to Telegram
+            number: '2',
+            title: 'Link your Smart Wallet to Telegram account',
+            description: (
+                <div className="mt-2">
+                    {loading ? (
+                        <p className="text-gray-400">Checking wallet connection...</p>
+                    ) : smartWalletInfo ? (
+                        <div className="bg-green-900 bg-opacity-50 p-4 rounded-lg">
+                            <p className="text-green-400">✓ Wallet already linked to Telegram</p>
+                            <p className="text-sm text-gray-300">Connected since: {new Date(smartWalletInfo.createdAt).toLocaleDateString()}</p>
+                        </div>
+                    ) : telegramUser ? (
+                        <div className="flex justify-center">
+                            <button
+                                onClick={async () => {
+                                    const message = `Link Smart Wallet ${smartWalletId} to Telegram ID ${telegramUser.id}`;
+                                    if(wallet.signMessage) {
+                                        const signedMessage = await wallet.signMessage(new TextEncoder().encode(message));
+                                        dispatch(linkSmartWallet({message, signedMessage}));
+                                    } else {
+                                        dispatch(addNotificationWithTimeout({
+                                            notification: {
+                                                message: "Wallet doesn't support message signing",
+                                                type: "error"
+                                            },
+                                            timeout: 5000
+                                        }));
+                                    }
+                                }} 
+                                className={`mt-2 ${
+                                    isLinking 
+                                        ? 'bg-gray-400 cursor-not-allowed' 
+                                        : 'bg-white hover:bg-gray-200'
+                                } text-black font-medium px-6 py-2 rounded-md transition duration-300 ease-in-out transform hover:scale-105`}
+                                disabled={isLinking || !wallet.publicKey}
+                            >
+                                {isLinking ? 'Linking...' : 'Link to Smart Wallet'}
+                            </button>
+                        </div>
+                    ) : (
+                        <p className="text-yellow-400">Please complete step 1 first</p>
+                    )}
+                </div>
+            ),
+        },
+        { // Step 3: Approve Telegram Bot
+            number: '3',
+            title: 'Approve the Telegram Bot',
+            description: (
+                <div className="mt-2">
+                    {isTelegramBotApproved ? (
+                        <p className="text-green-400">✓ Bot already approved</p>
+                    ) : (
+                        <button
+                            onClick={() => setShowApprovalForm(true)}
+                            className="bg-white text-black hover:bg-gray-200 font-medium px-6 py-2 rounded-md transition duration-300 ease-in-out transform hover:scale-105"
+                            disabled={!wallet.publicKey}
+                        >
+                            Approve Bot
+                        </button>
+                    )}
+                </div>
+            ),
+        },
+        { // Step 4: Searching for the bot in Telegram
+            number: '4',
             title: 'Open Telegram and search for @smartWallletBot',
             description: (
                 <p className="ml-0">
@@ -45,26 +167,21 @@ const TelegramBotDemo: React.FC = () => {
                 </p>
             ),
         },
-        { // Step 2: Setting up the smart wallet with a specific command.
-            number: '2',
-            title: 'Set the smart wallet using command /setwallet SMART_WALLET_ID PUBLIC_KEY',
-            command: (
-                <code className="bg-gray-700 rounded-md p-1 break-all">
-                    /setwallet {smartWalletId} {userPublicKey}
-                </code>
-            ),
-        },
-        { // Step 3: Sending SOL to friends using a command.
-            number: '3',
-            title: 'Send SOL to friends using command /send SOL_AMOUNT TO_PUBLIC_KEY',
-            command: (
-                <code className="bg-gray-700 rounded-md p-1 break-all">
-                    /sendsol 1.5 {userPublicKey}
-                </code>
+
+        { // Step 5: Sending SOL to friends using a command.
+            number: '5',
+            title: 'Send SOL to friends using command /sendsol <sol-amount> <public-key>',
+            description: (
+                <>
+                    <p className="mb-2 text-yellow-400">Note: Make sure to deposit some SOL into your smart wallet before transferring.</p>
+                    <p>Use the following command format:</p>
+                    <code className="bg-gray-700 rounded-md p-1 break-all block mt-2">
+                        /sendsol 1.5 {userPublicKey}
+                    </code>
+                </>
             ),
         },
     ];
-
 
     const handleApproveTelegramBot = async () => {
         if (!wallet.publicKey || !wallet.signTransaction) {
@@ -215,7 +332,7 @@ const TelegramBotDemo: React.FC = () => {
                 isLoading={isApproving}
                 text="Approve Telegram Bot"
                 loadingText="Approving..."
-                className="w-full bg-white text-black hover:bg-gray-200 font-medium py-2 px-6 rounded-md transition duration-300 ease-in-out transform hover:scale-105"
+                className="w-full bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white font-medium py-2 px-6 rounded-md transition duration-300 ease-in-out transform hover:scale-105"
             />
         </div>
     );
@@ -231,7 +348,6 @@ const TelegramBotDemo: React.FC = () => {
             {isTelegramBotApproved ? (
                 <div className="bg-green-900 bg-opacity-50 text-green-200 p-4 rounded-lg mb-6">
                     ✅ Telegram bot is approved! You can now use it to send SOL.
-
                 </div>
             ) : showApprovalForm ? (
                 renderApprovalForm()
@@ -240,7 +356,7 @@ const TelegramBotDemo: React.FC = () => {
                     onClick={() => setShowApprovalForm(true)}
                     isLoading={false}
                     text="Approve Telegram Bot"
-                    className="w-full bg-white text-black hover:bg-gray-200 font-medium py-2 px-6 rounded-md transition duration-300 ease-in-out transform hover:scale-105 mb-6"
+                    className="w-full bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white font-medium py-2 px-6 rounded-md transition duration-300 ease-in-out transform hover:scale-105 mb-6"
                 />
             )}
 
@@ -290,11 +406,6 @@ const TelegramBotDemo: React.FC = () => {
                                 {step.description && (
                                     <div className="mt-1 break-words">
                                         {step.description} {/* Optional description for the step */}
-                                    </div>
-                                )}
-                                {step.command && (
-                                    <div className="mt-2">
-                                        {step.command} {/* Optional command code for the step */}
                                     </div>
                                 )}
                             </div>

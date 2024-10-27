@@ -6,22 +6,30 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "tsc",
-    "start": "tsc && node dist/index.js"
+    "start:bot": "tsc && node dist/index.js",
+    "start:server": "node dist/server.js"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
     "@grammyjs/conversations": "^1.2.0",
     "@solana/web3.js": "^1.95.3",
+    "@types/bs58": "^4.0.4",
     "bcrypt": "^5.1.1",
     "borsh": "^2.0.0",
+    "bs58": "^6.0.0",
     "buffer": "^6.0.3",
+    "cors": "^2.8.5",
     "db": "file:../db",
     "dotenv": "^16.4.5",
-    "grammy": "^1.21.1"
+    "express": "^4.21.1",
+    "grammy": "^1.21.1",
+    "tweetnacl": "^1.0.3"
   },
   "devDependencies": {
     "@types/bcrypt": "^5.0.2",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
     "@types/node": "^20.10.4",
     "typescript": "^5.3.3"
   }

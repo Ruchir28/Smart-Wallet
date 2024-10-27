@@ -4,6 +4,7 @@ import walletReducer, { publicKeyListenerMiddlewareWallet } from './walletSlice'
 import smartWalletReducer from './smartWalletSlice';
 import notificationReducer from './notificationSlice';
 import {publicKeyListenerMiddleware} from './smartWalletSlice'
+import telegramReducer from './telegramSlice';
 
 const store = configureStore({
     reducer: {
@@ -11,6 +12,7 @@ const store = configureStore({
         wallet: walletReducer,
         smartWallet: smartWalletReducer,
         notification: notificationReducer,
+        telegram: telegramReducer,
     },
     middleware: (getDefaultMiddleware) =>
         getDefaultMiddleware().prepend(publicKeyListenerMiddleware.middleware, publicKeyListenerMiddlewareWallet.middleware),

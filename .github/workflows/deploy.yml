@@ -112,6 +112,7 @@ jobs:
           cd /workplace/smart_wallet/smartWalletTelBot
           npm ci
           pm2 restart smartWalletTelBot || pm2 start dist/index.js --name smartWalletTelBot
+          pm2 restart smartWalletTelBot-server || pm2 start dist/server.js --name smartWalletTelBot-server
         
         EOF
 

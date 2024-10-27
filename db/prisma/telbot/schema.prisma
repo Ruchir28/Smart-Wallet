@@ -9,10 +9,19 @@ datasource db {
 }
 
 model User {
-    id String @id
-    smartWalletId String @unique
-    publicKey String
-    pinHash String
+    telegramId String @id
+    telegramUsername String
     createdAt DateTime @default(now())
     updatedAt DateTime @updatedAt
+    smartWallets SmartWallet[] 
+}
+
+model SmartWallet {
+    id String @id
+    publicKey String
+    user User @relation(fields: [telegramId], references: [telegramId])
+    telegramId String
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+    pinHash String?
 }

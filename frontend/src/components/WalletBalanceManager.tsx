@@ -10,7 +10,6 @@ import LoadingButton from './LoadingButton';
 import { fetchLatestBalance } from '../store/smartWalletSlice';
 import { ThunkDispatch } from 'redux-thunk';
 import BalanceLoader from './BalanceLoader';
-import NotificationManager from './NotificationManager';
 import { addNotificationWithTimeout } from '../store/notificationSlice';
 
 interface WalletBalanceManagerProps {
@@ -204,9 +203,6 @@ const WalletBalanceManager: React.FC<WalletBalanceManagerProps> = ({ onSuccess, 
 
     return (
         <div className="bg-gray-900 rounded-lg p-6 shadow-xl">
-            <NotificationManager/>
-            {/* demo button to show notification */}
-            <button onClick={() => showNotification("This is a long notification message that demonstrates how the component handles overflow. It should be truncated initially and expandable when clicked.", "success")}>Show Long Notification</button>
             <h2 className="text-2xl font-bold text-white mb-6">Wallet Balance Manager</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div className="space-y-4">

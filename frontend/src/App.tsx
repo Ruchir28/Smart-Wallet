@@ -1,4 +1,5 @@
-import  { useMemo, useEffect } from 'react';
+import React from 'react';
+import { useMemo, useEffect } from 'react';
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import { WalletProvider } from '@solana/wallet-adapter-react';
 import {
@@ -18,6 +19,7 @@ import './App.css';
 import '@solana/wallet-adapter-react-ui/styles.css';
 import { useSelector } from 'react-redux';
 import { RootState } from './store/store';
+import NotificationManager from './components/NotificationManager';
 
 function App() {
 
@@ -54,6 +56,8 @@ function App() {
     }, [endpoint]);
 
     return (
+        <>
+            <NotificationManager />
             <WalletProvider autoConnect wallets={wallets}>
                 <WalletModalProvider>
                     <Router>
@@ -80,6 +84,7 @@ function App() {
                     </Router>
                 </WalletModalProvider>
             </WalletProvider>
+        </>
     );
 }
 
