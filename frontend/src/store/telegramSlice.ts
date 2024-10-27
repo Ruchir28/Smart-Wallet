@@ -175,7 +175,7 @@ const telegramSlice = createSlice({
         builder.addCase(fetchSmartWalletInfo.fulfilled, (state, action) => {
             state.smartWalletInfo = action.payload;
         });
-        builder.addCase(fetchSmartWalletInfo.rejected, (state, action) => {
+        builder.addCase(fetchSmartWalletInfo.rejected, (state,_action) => {
             state.smartWalletInfo = null;
         })
     },

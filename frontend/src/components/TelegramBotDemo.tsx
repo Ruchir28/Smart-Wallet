@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '../store/store';
 import { PublicKey } from '@solana/web3.js';
@@ -10,7 +10,7 @@ import { DateTime } from 'luxon';
 import { fetchLatestApprovedDapps } from '../store/smartWalletSlice';
 import { ThunkDispatch } from 'redux-thunk';
 import { addNotificationWithTimeout } from '../store/notificationSlice';
-import { fetchSmartWalletInfo, linkSmartWallet, setTelegramUser, TelegramUser } from '../store/telegramSlice';
+import { fetchSmartWalletInfo, linkSmartWallet, TelegramUser } from '../store/telegramSlice';
 import TelegramLoginButton from './TelegramLoginButton';
 
 declare global {
