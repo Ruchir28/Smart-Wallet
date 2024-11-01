@@ -1,7 +1,7 @@
 import { createAsyncThunk, createListenerMiddleware, createSlice, PayloadAction } from '@reduxjs/toolkit';
 import { PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js";
 
-import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import { getTokenMetadata, TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import { fetchApprovedDapps } from '../utils/smartWalletInteractions';
 import { setPublicKey } from './walletSlice';
 import { ConnectionManager } from '../utils/ConnectionManager';
@@ -108,6 +108,7 @@ export const fetchSmartWallet = createAsyncThunk(
                 fetchApprovedDapps(connection, programId, smartWalletAddress)
             ]);
 
+
             let balance = 0;
             let tokens: Token[] = [];
             let approvedDapps: ApprovedDapp[] = [];
@@ -129,6 +130,17 @@ export const fetchSmartWallet = createAsyncThunk(
             } else {
                 console.error('Error fetching approved dapps:', results[2].reason);
             }
+
+           const tokenMetadatas = await Promise.allSettled(tokens.map(token => getTokenMetadata(connection, new PublicKey(token.mint), undefined, TOKEN_PROGRAM_ID)));
+
+
+           tokenMetadatas.forEach((result, index) => {
+            if (result.status === 'fulfilled' && result.value) {
+                console.log(result.value);
+                tokens[index].logo = result.value.uri;
+                tokens[index].symbol = result.value.symbol;
+            }
+           });
 
             return {
                 address: smartWalletAddress.toString(),

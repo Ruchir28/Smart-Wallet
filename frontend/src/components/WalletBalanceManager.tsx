@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { PublicKey, Transaction } from '@solana/web3.js';
 import { getAssociatedTokenAddress } from '@solana/spl-token';
@@ -11,6 +11,8 @@ import { fetchLatestBalance } from '../store/smartWalletSlice';
 import { ThunkDispatch } from 'redux-thunk';
 import BalanceLoader from './BalanceLoader';
 import { addNotificationWithTimeout } from '../store/notificationSlice';
+import TokenSelectModal from './TokenSelectModal';
+import { fetchTokensMetadata } from '../store/tokenMetadataSlice';
 
 interface WalletBalanceManagerProps {
     onSuccess: (signature: string) => void;
@@ -26,13 +28,15 @@ const WalletBalanceManager: React.FC<WalletBalanceManagerProps> = ({ onSuccess, 
     const userTokenAccounts = useSelector((state: RootState) => state.wallet.tokens);
     const solBalance = useSelector((state: RootState) => state.smartWallet.balance);
     
-    const [selectedToken, setSelectedToken] = useState<string>('SOL');
+    const [selectedDepositToken, setSelectedDepositToken] = useState<string>('SOL');
+    const [selectedWithdrawToken, setSelectedWithdrawToken] = useState<string>('SOL');
     const [depositAmount, setDepositAmount] = useState<string>('');
     const [withdrawAmount, setWithdrawAmount] = useState<string>('');
     const [action, setAction] = useState<'deposit' | 'withdraw' | null>(null);
     const [isDepositing, setIsDepositing] = useState(false);
     const [isWithdrawing, setIsWithdrawing] = useState(false);
     const isLoadingBalance = useSelector((state: RootState) => state.smartWallet.loadingBalance);
+    const tokenMetadata = useSelector((state: RootState) => state.tokenMetadata.metadata);
     const dispatch = useDispatch<ThunkDispatch<RootState, any, any>>();
     const showNotification = useCallback((message: string, type: 'success' | 'error') => {
         dispatch(addNotificationWithTimeout({
@@ -44,6 +48,13 @@ const WalletBalanceManager: React.FC<WalletBalanceManagerProps> = ({ onSuccess, 
         }));
     }, [dispatch]);
 
+    const [isDepositModalOpen, setIsDepositModalOpen] = useState(false);
+    const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
+
+    useEffect(() => {
+        dispatch(fetchTokensMetadata([...tokenAccounts.map(token => token.mint), ...userTokenAccounts.map(token => token.mint)]));
+    }, [tokenAccounts, userTokenAccounts, dispatch]);
+
     const handleDeposit = async () => {
         if (!wallet.publicKey) {
             showNotification("Wallet not connected", "error");
@@ -54,12 +65,12 @@ const WalletBalanceManager: React.FC<WalletBalanceManagerProps> = ({ onSuccess, 
 
         try {
             let transactionBase64: string;
-            if (selectedToken === 'SOL') {
+            if (selectedDepositToken === 'SOL') {
                 transactionBase64 = await depositSol(connection, programId, wallet.publicKey, parseFloat(depositAmount));
             } else {
-                const tokenMint = new PublicKey(selectedToken);
+                const tokenMint = new PublicKey(selectedDepositToken);
                 const userATA = await getAssociatedTokenAddress(tokenMint, wallet.publicKey);
-                const tokenInfo = userTokenAccounts.find(token => token.mint === selectedToken);
+                const tokenInfo = userTokenAccounts.find(token => token.mint === selectedDepositToken);
                 if(!tokenInfo) {
                     throw new Error('Token information not found');
                 }
@@ -107,12 +118,12 @@ const WalletBalanceManager: React.FC<WalletBalanceManagerProps> = ({ onSuccess, 
 
         try {
             let transactionBase64: string;
-            if (selectedToken === 'SOL') {
+            if (selectedWithdrawToken === 'SOL') {
                 transactionBase64 = await withdrawSol(connection, programId, wallet.publicKey, parseFloat(withdrawAmount));
             } else {
-                const tokenMint = new PublicKey(selectedToken);
+                const tokenMint = new PublicKey(selectedWithdrawToken);
                 const userATA = await getAssociatedTokenAddress(tokenMint, wallet.publicKey);
-                const tokenInfo = userTokenAccounts.find(token => token.mint === selectedToken);
+                const tokenInfo = userTokenAccounts.find(token => token.mint === selectedWithdrawToken);
                 if(!tokenInfo) {
                     throw new Error('Token information not found');
                 }
@@ -154,32 +165,32 @@ const WalletBalanceManager: React.FC<WalletBalanceManagerProps> = ({ onSuccess, 
         if (!action) return null;
 
         const availableTokens = action === 'deposit' ? userTokenAccounts : tokenAccounts;
+        const selectedToken = action === 'deposit' ? selectedDepositToken : selectedWithdrawToken;
+        const selectedTokenInfo = availableTokens.find(token => token.mint === selectedToken) || 
+            (selectedToken === 'SOL' ? { symbol: 'SOL', logo: '/sol.png' } : null);
 
         return (
             <div className="mt-4 bg-gray-800 p-6 rounded-lg shadow-inner">
                 <h3 className="text-xl font-semibold text-white mb-4 capitalize">{action}</h3>
                 <div className="relative mb-4">
                     <div className="flex items-center bg-gray-700 rounded-md">
-                        <div className="relative w-full">
-                            <select
-                                value={selectedToken}
-                                onChange={(e) => setSelectedToken(e.target.value)}
-                                className="appearance-none w-full bg-transparent text-white px-4 py-2 pr-8 rounded-md focus:outline-none"
-                            >
-                                <option value="SOL">SOL</option>
-                                {availableTokens.map((token, index) => (
-                                    <option key={index} value={token.mint}>{token.symbol}</option>
-                                ))}
-                            </select>
-                            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-white">
-                                <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
-                                    <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/>
-                                </svg>
-                            </div>
-                        </div>
+                        <button
+                            onClick={() => action === 'deposit' ? setIsDepositModalOpen(true) : setIsWithdrawModalOpen(true)}
+                            className="flex items-center space-x-2 bg-gray-600 hover:bg-gray-500 rounded-l-md px-4 py-2 text-white"
+                        >
+                            {selectedTokenInfo && (
+                                <>
+                                    <img src={tokenMetadata[selectedToken]?.image || selectedTokenInfo.logo || "/default-token.png"} alt={selectedTokenInfo.symbol} className="w-6 h-6 rounded-full" />
+                                    <span>{selectedTokenInfo.symbol}</span>
+                                </>
+                            )}
+                            <svg className="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </button>
                         <input
                             type="text"
-                            placeholder={`Amount`}
+                            placeholder="Amount"
                             value={action === 'deposit' ? depositAmount : withdrawAmount}
                             onChange={(e) => action === 'deposit' ? setDepositAmount(e.target.value) : setWithdrawAmount(e.target.value)}
                             className="flex-grow bg-transparent text-white px-4 py-2 focus:outline-none truncate"
@@ -242,6 +253,22 @@ const WalletBalanceManager: React.FC<WalletBalanceManagerProps> = ({ onSuccess, 
                     {renderActionForm()}
                 </div>
             </div>
+            
+            <TokenSelectModal
+                isOpen={isDepositModalOpen}
+                onClose={() => setIsDepositModalOpen(false)}
+                onSelect={(token) => setSelectedDepositToken(token.mint)}
+                title="Select Token to Deposit"
+                modalType="wallet"
+            />
+            
+            <TokenSelectModal
+                isOpen={isWithdrawModalOpen}
+                onClose={() => setIsWithdrawModalOpen(false)}
+                onSelect={(token) => setSelectedWithdrawToken(token.mint)}
+                title="Select Token to Withdraw"
+                modalType="smartWallet"
+            />
         </div>
     );
 };

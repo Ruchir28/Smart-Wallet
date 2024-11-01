@@ -5,12 +5,13 @@ import smartWalletReducer from './smartWalletSlice';
 import notificationReducer from './notificationSlice';
 import {publicKeyListenerMiddleware} from './smartWalletSlice'
 import telegramReducer from './telegramSlice';
-
+import tokenMetadataReducer from './tokenMetadataSlice';
 const store = configureStore({
     reducer: {
         connection: connectionReducer,
         wallet: walletReducer,
         smartWallet: smartWalletReducer,
+        tokenMetadata: tokenMetadataReducer,
         notification: notificationReducer,
         telegram: telegramReducer,
     },

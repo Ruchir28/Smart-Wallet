@@ -41,7 +41,7 @@ const fetchSmartWalletInfo = createAsyncThunk('telegram/fetchSmartWalletInfo', a
     if (!state.smartWallet.address) {
         thunkAPI.dispatch(addNotificationWithTimeout({
             notification: {
-                message: "Smart Wallet not found",
+                message: "Smart Wallet not created yet",
                 type: "error",
             },
             timeout: 5000
@@ -56,6 +56,16 @@ const fetchSmartWalletInfo = createAsyncThunk('telegram/fetchSmartWalletInfo', a
         .then(res => res.json());
         if(smartWalletInfo.success) {
             return smartWalletInfo.data;
+        }
+        if(smartWalletInfo.code === 'NOT_LINKED') {
+            thunkAPI.dispatch(addNotificationWithTimeout({
+                notification: {
+                    message: "Smart Wallet Not Linked Yet",
+                    type: "error",
+                },
+                timeout: 5000
+            }));
+            return null;
         }
         throw new Error("Failed to fetch smart wallet info");
     } catch (error) {
