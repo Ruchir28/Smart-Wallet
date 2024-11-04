@@ -1,7 +1,7 @@
 import { Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL, TransactionInstruction } from '@solana/web3.js';
-import { TOKEN_PROGRAM_ID, createTransferInstruction, getAssociatedTokenAddress, createAssociatedTokenAccountInstruction } from '@solana/spl-token';
+import { TOKEN_PROGRAM_ID, getAssociatedTokenAddress, createAssociatedTokenAccountInstruction, TOKEN_2022_PROGRAM_ID, createTransferCheckedInstruction } from '@solana/spl-token';
 import { serializeWalletInstruction, WalletInstructionType, TransferType, decodeDappData } from '../walletInteractions';
-import { ApprovedDapp } from '../store/smartWalletSlice';
+import { ApprovedDapp, TokenProgram } from '../store/smartWalletSlice';
 
 export async function depositSol(
     connection: Connection,
@@ -75,14 +75,17 @@ export async function depositToken(
     tokenMint: PublicKey,
     userATA: PublicKey,
     amount: number,
-    decimals: number
+    decimals: number,
+    tokenProgram: TokenProgram  
 ): Promise<string> {
     const [walletAddress] = PublicKey.findProgramAddressSync(
         [Buffer.from("wallet"), walletPublicKey.toBuffer()],
         programId
     );
 
-    const walletATA = await getAssociatedTokenAddress(tokenMint, walletAddress, true);
+    const tokenProgramId = tokenProgram === TokenProgram.SPL ? TOKEN_PROGRAM_ID : TOKEN_2022_PROGRAM_ID;
+
+    const walletATA = await getAssociatedTokenAddress(tokenMint, walletAddress, true, tokenProgramId);
 
     const transaction = new Transaction();
 
@@ -91,25 +94,36 @@ export async function depositToken(
 
     if (!walletATAInfo) {
         // If the account doesn't exist, add an instruction to create it
+        console.log("createAssociatedTokenAccountInstruction");
         transaction.add(
             createAssociatedTokenAccountInstruction(
                 walletPublicKey,
                 walletATA,
                 walletAddress,
-                tokenMint
+                tokenMint,
+                tokenProgramId
             )
         );
     }
 
-    // Add the transfer instruction
-    transaction.add(
-        createTransferInstruction(
-            userATA,
-            walletATA,
-            walletPublicKey,
-            amount * Math.pow(10, decimals) // Use the correct number of decimals
-        )
+
+      // Calculate the amount in the smallest unit
+    const amountInSmallestUnit = BigInt(amount * 10 ** decimals);
+
+    // Create the transferChecked instruction
+    const transferInstruction = createTransferCheckedInstruction(
+        userATA, 
+        tokenMint,
+        walletATA, 
+        walletPublicKey, 
+        amountInSmallestUnit,
+        decimals, 
+        undefined,
+        tokenProgramId
     );
+
+    // Add the transfer instruction
+    transaction.add(transferInstruction);
 
     const { blockhash } = await connection.getLatestBlockhash();
     transaction.recentBlockhash = blockhash;
@@ -125,14 +139,17 @@ export async function withdrawToken(
     tokenMint: PublicKey,
     userATA: PublicKey,
     amount: number,
-    decimals: number
+    decimals: number,
+    tokenProgram: TokenProgram
 ): Promise<string> {
     const [walletAddress] = PublicKey.findProgramAddressSync(
         [Buffer.from("wallet"), walletPublicKey.toBuffer()],
         programId
     );
 
-    const walletATA = await getAssociatedTokenAddress(tokenMint, walletAddress, true);
+    const tokenProgramId = tokenProgram === TokenProgram.SPL ? TOKEN_PROGRAM_ID : TOKEN_2022_PROGRAM_ID;
+
+    const walletATA = await getAssociatedTokenAddress(tokenMint, walletAddress, true, tokenProgramId);
 
     const instructionData = serializeWalletInstruction({
         type: WalletInstructionType.Withdraw,
@@ -142,16 +159,27 @@ export async function withdrawToken(
         }
     });
 
+    console.log("- Withdrawing token with parameters:");
+    console.log("- Program ID:", programId.toString());
+    console.log("- Wallet Public Key:", walletPublicKey.toString());
+    console.log("- Token Mint:", tokenMint.toString());
+    console.log("- User ATA:", userATA.toString());
+    console.log("- Amount:", amount);
+    console.log("- Decimals:", decimals);
+    console.log("- Token Program:", tokenProgram);
+    console.log("- Wallet Address (PDA):", walletAddress.toString());
+    console.log("- Token Program ID:", tokenProgramId.toString());
+    console.log("- Wallet ATA:", walletATA.toString());
+
     const instruction = new TransactionInstruction({
         keys: [
             { pubkey: walletPublicKey, isSigner: true, isWritable: false },
             { pubkey: walletAddress, isSigner: false, isWritable: true },
-            { pubkey: walletPublicKey, isSigner: false, isWritable: true },
-            { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
             { pubkey: userATA, isSigner: false, isWritable: true },
+            { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
             { pubkey: tokenMint, isSigner: false, isWritable: false },
             { pubkey: walletATA, isSigner: false, isWritable: true },
-            { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+            { pubkey: tokenProgramId, isSigner: false, isWritable: false },
         ],
         programId,
         data: Buffer.from(instructionData)

@@ -18,6 +18,7 @@ import Loader from './Loader';
 import TelegramBotDemo from './TelegramBotDemo';
 import { fetchSmartWallet } from '../store/smartWalletSlice';
 import { addNotificationWithTimeout } from '../store/notificationSlice';
+import TokenSelectModal from './TokenSelectModal';
 
 
 
@@ -33,13 +34,20 @@ const SmartWalletInteractions: React.FC = () => {
   const [sendAmount, setSendAmount] = useState<string>('');
   const [sendRecipient, setSendRecipient] = useState<string>('');
   const [sendTokenMint, setSendTokenMint] = useState<string>('');
-  const [sendType, setSendType] = useState<'SOL' | 'Token'>('SOL');
+  const [isTokenModalOpen, setIsTokenModalOpen] = useState(false);
 
+  const tokenMetadata = useSelector((state: RootState) => state.tokenMetadata.metadata);
   const hasSmartWallet = useSelector((state: RootState) => state.smartWallet.initialized);
   const isLoading = useSelector((state: RootState) => state.smartWallet.isLoading);
   const smartWalletId = useSelector((state: RootState) => state.smartWallet.address);
   const approvedDapps = useSelector((state: RootState) => state.smartWallet.approvedDapps);
   const userTokens = useSelector((state: RootState) => state.smartWallet.tokens);
+
+
+  const selectedToken = useMemo(() => 
+    userTokens.find(token => token.mint === sendTokenMint), 
+    [sendTokenMint, userTokens]
+  );
 
   const program = useSelector((state: RootState) => state.connection.programId);
   const PROGRAM_ID = useMemo(() => new PublicKey(program), [program]);
@@ -152,7 +160,18 @@ const SmartWalletInteractions: React.FC = () => {
 
       let transaction: string;
 
-      if (sendType === 'SOL') {
+      if (!selectedToken) {
+        dispatch(addNotificationWithTimeout({
+          notification: {
+            message: "Please select a token",
+            type: "error"
+          },
+          timeout: 5000
+        }));
+        return;
+      }
+
+      if (selectedToken.mint === PublicKey.default.toString()) {
         transaction = await sendSol(
           connection,
           PROGRAM_ID,
@@ -252,13 +271,13 @@ const SmartWalletInteractions: React.FC = () => {
                       <div className="flex items-center">
                         <svg className="w-5 h-5 mr-3 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
                         <span className="text-gray-300">
-                          <span className="font-medium">Token:</span> {tokenInfo ? tokenInfo.symbol : 'Unknown'}
+                          <span className="font-medium">Token:</span> {tokenMetadata[dapp.tokenMint]?.symbol || dapp.tokenMint}
                         </span>
                       </div>
                       <div className="flex items-center">
                         <svg className="w-5 h-5 mr-3 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                         <span className="text-gray-300">
-                          <span className="font-medium">Max:</span> {maxAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })} {tokenInfo ? tokenInfo.symbol : ''}
+                          <span className="font-medium">Max:</span> {maxAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })} {tokenMetadata[dapp.tokenMint]?.symbol || dapp.tokenMint}
                         </span>
                       </div>
                       <div className="flex items-center">
@@ -308,28 +327,22 @@ const SmartWalletInteractions: React.FC = () => {
           />
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <select
-            value={sendType}
-            onChange={(e) => setSendType(e.target.value as 'SOL' | 'Token')}
-            className="w-full bg-gray-700 bg-opacity-50 text-white px-4 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 border border-gray-600"
+          <TokenSelectModal
+            isOpen={isTokenModalOpen}
+            onClose={() => setIsTokenModalOpen(false)}
+            onSelect={(token) => {
+              setSendTokenMint(token.mint);
+              setIsTokenModalOpen(false);
+            }}
+            title="Select Token"
+            modalType="smartWallet"
+          />
+          <button
+            onClick={() => setIsTokenModalOpen(true)}
+            className="w-full bg-gray-700 bg-opacity-50 text-white px-4 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 border border-gray-600 text-left"
           >
-            <option value="SOL">SOL</option>
-            <option value="Token">Token</option>
-          </select>
-          {sendType === 'Token' && (
-            <select
-              value={sendTokenMint}
-              onChange={(e) => setSendTokenMint(e.target.value)}
-              className="w-full bg-gray-700 bg-opacity-50 text-white px-4 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 border border-gray-600"
-            >
-              <option value="">Select a token</option>
-              {userTokens.map((token) => (
-                <option key={token.mint} value={token.mint}>
-                  {token.mint} (Balance: {token.uiAmount})
-                </option>
-              ))}
-            </select>
-          )}
+            {selectedToken ? `${tokenMetadata[selectedToken.mint]?.symbol || selectedToken.mint} (Balance: ${selectedToken.uiAmount})` : 'Select a token'}
+          </button>
         </div>
         <LoadingButton
           onClick={handleSend}

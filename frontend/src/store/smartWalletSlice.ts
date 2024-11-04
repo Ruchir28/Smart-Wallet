@@ -1,7 +1,7 @@
 import { createAsyncThunk, createListenerMiddleware, createSlice, PayloadAction } from '@reduxjs/toolkit';
-import { PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js";
+import { PublicKey, LAMPORTS_PER_SOL, AccountInfo, ParsedAccountData } from "@solana/web3.js";
 
-import { getTokenMetadata, TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import { TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import { fetchApprovedDapps } from '../utils/smartWalletInteractions';
 import { setPublicKey } from './walletSlice';
 import { ConnectionManager } from '../utils/ConnectionManager';
@@ -10,14 +10,19 @@ import { setConnection } from './connectionSlice';
 import { Connection } from '@solana/web3.js';
 import { addNotificationWithTimeout } from './notificationSlice';
 
+export enum TokenProgram {
+    SPL = 'SPL',
+    TOKEN_2022 = 'TOKEN_2022',
+    NATIVE_SOL = 'NATIVE_SOL' // PLACEHOLDER FOR NATIVE SOL (STORED AS TOKEN FOR CONSISTENCY)
+}
+
 export interface Token {
     address: string;
     decimals: number;
-    symbol: string;
     mint: string;
     amount: string;
     uiAmount: number | null;
-    logo: string
+    tokenProgram: TokenProgram
 }
 
 export interface ApprovedDapp {
@@ -30,7 +35,6 @@ export interface ApprovedDapp {
 
 interface SmartWalletState {
     address: string | null;
-    balance: string;
     tokens: Token[];
     initialized: boolean;
     isLoading: boolean;
@@ -42,7 +46,6 @@ interface SmartWalletState {
 
 const initialState: SmartWalletState = {
     address: null,
-    balance: "0",
     tokens: [],
     initialized: false,
     isLoading: false,
@@ -70,16 +73,17 @@ const fetchSmartWalletAccountInfo = async (connection: Connection, smartWalletAd
     return accountInfo;
 };
 
-const processTokenAccount = (tokenAccount: any): Token => {
+export const processTokenAccount = (tokenAccount: { pubkey: PublicKey; account: AccountInfo<ParsedAccountData> }): Token => {
     const tokenInfo = tokenAccount.account.data.parsed.info;
+    const tokenProgram = tokenAccount.account.owner;
+    const tokenProgramEnum =  tokenProgram === TOKEN_PROGRAM_ID ? TokenProgram.SPL : TokenProgram.TOKEN_2022;
     return {
         address: tokenAccount.pubkey.toString(),
         decimals: tokenInfo.tokenAmount.decimals,
         mint: tokenInfo.mint,
         amount: tokenInfo.tokenAmount.amount,
         uiAmount: tokenInfo.tokenAmount.uiAmount,
-        logo: '/unknown-token.svg',
-        symbol: 'Unknown',
+        tokenProgram: tokenProgramEnum
     };
 };
 
@@ -105,47 +109,82 @@ export const fetchSmartWallet = createAsyncThunk(
             const results = await Promise.allSettled([
                 connection.getBalance(smartWalletAddress),
                 connection.getParsedTokenAccountsByOwner(smartWalletAddress, { programId: TOKEN_PROGRAM_ID }),
+                connection.getParsedTokenAccountsByOwner(smartWalletAddress, { programId: TOKEN_2022_PROGRAM_ID }),
                 fetchApprovedDapps(connection, programId, smartWalletAddress)
             ]);
 
 
-            let balance = 0;
             let tokens: Token[] = [];
             let approvedDapps: ApprovedDapp[] = [];
 
+            let nativeSolInfoAsToken: Token = {
+                address: smartWalletAddress.toString(),
+                decimals: 9,
+                mint: PublicKey.default.toString(),
+                amount: "0",
+                uiAmount: 0,
+                tokenProgram: TokenProgram.NATIVE_SOL
+            }
+
             if (results[0].status === 'fulfilled') {
-                balance = results[0].value;
+                nativeSolInfoAsToken.amount = results[0].value.toString();
+                nativeSolInfoAsToken.uiAmount = results[0].value / LAMPORTS_PER_SOL;
             } else {
                 console.error('Error fetching balance:', results[0].reason);
+                thunkApi.dispatch(addNotificationWithTimeout({
+                    notification: {
+                        message: `Failed to fetch Native SOL balance for your smart wallet`,
+                        type: "error"
+                    },
+                    timeout: 5000
+                }));
             }
+
+
 
             if (results[1].status === 'fulfilled') {
                 tokens = results[1].value.value.map(processTokenAccount);
             } else {
                 console.error('Error fetching tokens:', results[1].reason);
+                thunkApi.dispatch(addNotificationWithTimeout({
+                    notification: {
+                        message: `Failed to fetch tokens for your smart wallet`,
+                        type: "error"
+                    },
+                    timeout: 5000
+                }));
             }
 
-            if (results[2].status === 'fulfilled') {
-                approvedDapps = results[2].value;
+            if(results[2].status === 'fulfilled') {
+                tokens = [...tokens, ...results[2].value.value.map(processTokenAccount)];
             } else {
-                console.error('Error fetching approved dapps:', results[2].reason);
+                console.error('Error fetching tokens:', results[2].reason);
+                thunkApi.dispatch(addNotificationWithTimeout({
+                    notification: {
+                        message: `Failed to fetch tokens for your smart wallet`,
+                        type: "error"
+                    },
+                    timeout: 5000
+                })); 
             }
 
-           const tokenMetadatas = await Promise.allSettled(tokens.map(token => getTokenMetadata(connection, new PublicKey(token.mint), undefined, TOKEN_PROGRAM_ID)));
-
-
-           tokenMetadatas.forEach((result, index) => {
-            if (result.status === 'fulfilled' && result.value) {
-                console.log(result.value);
-                tokens[index].logo = result.value.uri;
-                tokens[index].symbol = result.value.symbol;
+            if (results[3].status === 'fulfilled') {
+                approvedDapps = results[3].value;
+            } else {
+                console.error('Error fetching approved dapps:', results[3].reason);
+                thunkApi.dispatch(addNotificationWithTimeout({
+                    notification: {
+                        message: `Failed to fetch approved dapps for your smart wallet`,
+                        type: "error"
+                    },
+                    timeout: 5000
+                }));
             }
-           });
+
 
             return {
                 address: smartWalletAddress.toString(),
-                balance: (balance / LAMPORTS_PER_SOL).toString(),
-                tokens,
+                tokens: [nativeSolInfoAsToken, ...tokens],
                 initialized: true,
                 approvedDapps,
                 owner: publicKey
@@ -163,27 +202,75 @@ export const fetchSmartWallet = createAsyncThunk(
 
 export const fetchLatestBalance = createAsyncThunk(
     'smartWallet/fetchLatestBalance',
-    async (_ , thunkApi) => {
-        const state = thunkApi.getState() as RootState;
-        const connection = ConnectionManager.getInstance().getConnection();
-        const smartWalletAddress = state.smartWallet.address;
-        if (!smartWalletAddress) {
-            thunkApi.dispatch(addNotificationWithTimeout({
-                notification: {
-                    message: "Smart wallet address is not set",
-                    type: "error"
-                },
-                timeout: 5000
-            }));
-            throw new Error("Smart wallet address is not set");
+    async (_, thunkApi) => {
+        try {
+            const state = thunkApi.getState() as RootState;
+            const connection = ConnectionManager.getInstance().getConnection();
+            const smartWalletAddress = state.smartWallet.address;
+
+            if (!smartWalletAddress) {
+                thunkApi.dispatch(addNotificationWithTimeout({
+                    notification: {
+                        message: "Smart wallet address is not set",
+                        type: "error"
+                    },
+                    timeout: 5000
+                }));
+                throw new Error("Smart wallet address is not set");
+            }
+
+            const pubKey = new PublicKey(smartWalletAddress);
+
+            const results = await Promise.allSettled([
+                connection.getBalance(pubKey),
+                connection.getParsedTokenAccountsByOwner(pubKey, { programId: TOKEN_PROGRAM_ID }),
+                connection.getParsedTokenAccountsByOwner(pubKey, { programId: TOKEN_2022_PROGRAM_ID })
+            ]);
+
+            let balance = 0;
+            let tokens: any[] = [];
+            let tokens2022: any[] = [];
+
+            if (results[0].status === 'fulfilled') {
+                balance = results[0].value;
+            } else {
+                console.error('Error fetching SOL balance:', results[0].reason);
+                thunkApi.dispatch(addNotificationWithTimeout({
+                    notification: {
+                        message: `Failed to fetch SOL balance`,
+                        type: "error"
+                    },
+                    timeout: 5000
+                }));
+            }
+
+            if (results[1].status === 'fulfilled') {
+                tokens = results[1].value.value;
+            } else {
+                console.error('Error fetching SPL tokens:', results[1].reason);
+            }
+
+            if (results[2].status === 'fulfilled') {
+                tokens2022 = results[2].value.value;
+            } else {
+                console.error('Error fetching Token-2022 tokens:', results[2].reason);
+            }
+
+            const nativeSolInfoAsToken: Token = {
+                address: smartWalletAddress,
+                decimals: 9,
+                mint: PublicKey.default.toString(),
+                amount: balance.toString(),
+                uiAmount: balance / LAMPORTS_PER_SOL,
+                tokenProgram: TokenProgram.NATIVE_SOL
+            };
+
+            return [nativeSolInfoAsToken, ...tokens.map(processTokenAccount), ...tokens2022.map(processTokenAccount)];
+
+        } catch (error) {
+            console.error('Error in fetchLatestBalance:', error);
+            throw error;
         }
-        const balance = await connection.getBalance(new PublicKey(smartWalletAddress));
-        // fetch tokens
-        const tokens = await connection.getParsedTokenAccountsByOwner(new PublicKey(smartWalletAddress), { programId: TOKEN_PROGRAM_ID });
-        return {
-            balance: (balance / LAMPORTS_PER_SOL).toString(),
-            tokens: tokens.value.map(processTokenAccount)
-        };
     }
 );
 
@@ -234,7 +321,6 @@ const smartWalletSlice = createSlice({
             .addCase(fetchSmartWallet.fulfilled, (state, action) => {
                 state.isLoading = false;
                 state.address = action.payload.address;
-                state.balance = action.payload.balance;
                 state.tokens = action.payload.tokens;
                 state.initialized = action.payload.initialized;
                 state.approvedDapps = action.payload.approvedDapps;
@@ -252,8 +338,7 @@ const smartWalletSlice = createSlice({
                 state.loadingBalance = true;
             })
             .addCase(fetchLatestBalance.fulfilled, (state, action) => {
-                state.balance = action.payload.balance;
-                state.tokens = action.payload.tokens;
+                state.tokens = action.payload;
                 state.loadingBalance = false;
             })
             .addCase(fetchLatestBalance.rejected, (state, action) => {

@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { Token } from '../store/smartWalletSlice';
 import { RootState } from '../store/store';
 import { useSelector } from 'react-redux';
+import { PublicKey } from '@solana/web3.js';
 
 interface TokenSelectModalProps {
     isOpen: boolean;
@@ -15,21 +16,7 @@ const TokenSelectModal: React.FC<TokenSelectModalProps> = ({ isOpen, onClose, mo
     if (!isOpen) return null;
     const smartWalletTokens = useSelector((state: RootState) => state.smartWallet.tokens);
     const walletTokens = useSelector((state: RootState) => state.wallet.tokens);
-    const walletBalance = useSelector((state: RootState) => state.wallet.balance);
-    const smartWalletBalance = useSelector((state: RootState) => state.smartWallet.balance);
-    const solToken = useMemo(() => {
-        const solToken = {
-            mint: 'SOL',
-            symbol: 'SOL',
-            address: 'SOL',
-            decimals: 9,
-            logo: "/sol.png",
-            amount: modalType === 'smartWallet' ? smartWalletBalance : walletBalance,
-            uiAmount: parseFloat(modalType === 'smartWallet' ? smartWalletBalance : walletBalance)
-        };
-        if (modalType === 'smartWallet') return solToken;
-        return solToken;
-    }, [modalType, smartWalletBalance, walletBalance]);
+
     const tokens = useMemo(() => {
         if (modalType === 'smartWallet') return smartWalletTokens;
         return walletTokens;
@@ -38,13 +25,12 @@ const TokenSelectModal: React.FC<TokenSelectModalProps> = ({ isOpen, onClose, mo
 
 
     const truncateAddress = (address: string) => {
-        if (address === 'SOL') return 'SOL';
+        if (address === PublicKey.default.toString()) return 'SOL';
         return `${address.slice(0, 4)}...${address.slice(-4)}`;
     };
 
     const getTokenImage = (token: Token) => {
-        if (token.mint === 'SOL') return "/sol.png";
-        return tokenMetadata[token.mint]?.image || token.logo || "/default-token.png";
+        return tokenMetadata[token.mint]?.image || "/unknown-token.svg";
     };
 
     return (
@@ -62,7 +48,7 @@ const TokenSelectModal: React.FC<TokenSelectModalProps> = ({ isOpen, onClose, mo
                     </button>
                 </div>
                 <div className="overflow-y-auto max-h-[60vh]">
-                    {[solToken, ...tokens].map((token, index) => (
+                    {tokens.map((token, index) => (
                         <div
                             key={index}
                             onClick={() => {
@@ -74,15 +60,15 @@ const TokenSelectModal: React.FC<TokenSelectModalProps> = ({ isOpen, onClose, mo
                             <div className="flex items-center space-x-3 min-w-0">
                                 <img 
                                     src={getTokenImage(token)} 
-                                    alt={token.symbol} 
+                                    alt={tokenMetadata[token.mint]?.symbol || "Unknown"} 
                                     className="w-8 h-8 rounded-full flex-shrink-0"
                                     onError={(e) => {
-                                        (e.target as HTMLImageElement).src = "/default-token.png";
+                                        (e.target as HTMLImageElement).src = "/unknown-token.svg";
                                     }}
                                 />
                                 <div className="min-w-0">
-                                    <div className="text-white font-medium truncate">
-                                        {token.symbol}
+                                    <div className="text-white font-medium truncate text-left">
+                                        {tokenMetadata[token.mint]?.symbol || "Unknown"}
                                     </div>
                                     <div 
                                         className="text-gray-400 text-sm truncate"

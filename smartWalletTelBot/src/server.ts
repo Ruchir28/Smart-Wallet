@@ -140,7 +140,8 @@ app.get('/getSmartWallet', async (req: Request, res: Response) => {
     if (typeof smartWalletId !== 'string') {
       res.status(400).json({
         success: false,
-        error: 'Invalid input type: smartWalletId must be a string'
+        error: 'Invalid input type: smartWalletId must be a string',
+        code: 'BAD_REQUEST'
       });
       return;
     }
@@ -155,7 +156,8 @@ app.get('/getSmartWallet', async (req: Request, res: Response) => {
     if (!smartWallet) {
       res.status(404).json({
         success: false,
-        error: 'Smart wallet not found'
+        error: 'Smart wallet not found',
+        code: 'NOT_LINKED'
       });
       return;
     }

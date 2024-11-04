@@ -85,12 +85,11 @@ const TelegramBotDemo: React.FC = () => {
                         </div>
                     )}
                     
-                    {/* Render TelegramLoginButton only if not connected */}
                     {!smartWalletInfo && !telegramUser && <TelegramLoginButton />}
                 </div>
             ),
         },
-        { // Step 2: Link Smart Wallet to Telegram
+        { 
             number: '2',
             title: 'Link your Smart Wallet to Telegram account',
             description: (
@@ -136,7 +135,7 @@ const TelegramBotDemo: React.FC = () => {
                 </div>
             ),
         },
-        { // Step 3: Approve Telegram Bot
+        { 
             number: '3',
             title: 'Approve the Telegram Bot',
             description: (
@@ -155,7 +154,7 @@ const TelegramBotDemo: React.FC = () => {
                 </div>
             ),
         },
-        { // Step 4: Searching for the bot in Telegram
+        { 
             number: '4',
             title: 'Open Telegram and search for @smartWallletBot',
             description: (
@@ -167,15 +166,28 @@ const TelegramBotDemo: React.FC = () => {
                 </p>
             ),
         },
-
-        { // Step 5: Sending SOL to friends using a command.
+        {
             number: '5',
+            title: 'Select the wallet you want to send SOL from',
+            description: (
+                <div className='flex flex-row'>                
+                    <p className='ml-0 block my-auto mr-2'>
+                        Select the wallet by using the command
+                    </p>
+                    <code className="bg-gray-700 rounded-md p-1 break-all block w-fit my-auto">
+                        /setwallet
+                    </code> 
+                </div>
+            )
+        },
+        { 
+            number: '6',
             title: 'Send SOL to friends using command /sendsol <sol-amount> <public-key>',
             description: (
                 <>
                     <p className="mb-2 text-yellow-400">Note: Make sure to deposit some SOL into your smart wallet before transferring.</p>
                     <p>Use the following command format:</p>
-                    <code className="bg-gray-700 rounded-md p-1 break-all block mt-2">
+                    <code className="bg-gray-700 rounded-md p-1 break-all block mt-2 w-fit">
                         /sendsol 1.5 {userPublicKey}
                     </code>
                 </>

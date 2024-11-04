@@ -4,20 +4,11 @@ import { getTokenMetadata, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from '@sola
 import { ConnectionManager } from '../utils/ConnectionManager';
 import { setConnection } from './connectionSlice';
 import { RootState } from './store';
-
-interface Token {
-    address: string;
-    decimals: number;
-    symbol: string;
-    mint: string;
-    amount: string;
-    uiAmount: number | null;
-    logo: string
-}
+import { addNotificationWithTimeout } from './notificationSlice';
+import { Token, TokenProgram, processTokenAccount } from './smartWalletSlice';
 
 interface WalletState {
     publicKey: string | null;
-    balance: string;
     tokens: Token[];
     connected: boolean;
     loading: boolean;
@@ -32,7 +23,6 @@ interface TokenMetadataResult {
 
 const initialState: WalletState = {
     publicKey: null,
-    balance: "0",
     tokens: [],
     connected: false,
     loading: false,
@@ -41,8 +31,8 @@ const initialState: WalletState = {
 
 export const fetchTokens = createAsyncThunk(
     'wallet/fetchTokens',
-    async (publicKey: string, _thunkApi) => {
-        if (!publicKey) return {tokens: [], balance: "0"};
+    async (publicKey: string, thunkApi) => {
+        if (!publicKey) return [];
         
         const connection = ConnectionManager.getInstance().getConnection();
         
@@ -58,11 +48,31 @@ export const fetchTokens = createAsyncThunk(
                 connection.getBalance(new PublicKey(publicKey))
             ]);
 
-            let balance = "0";
-            if (balanceResult.status === 'fulfilled') {
-                balance = (balanceResult.value / LAMPORTS_PER_SOL).toString();
+
+            let nativeSolInfoAsToken: Token = {
+                address: publicKey,
+                decimals: 9,
+                mint: PublicKey.default.toString(),
+                amount: "0",
+                uiAmount: 0,
+                tokenProgram: TokenProgram.NATIVE_SOL
             }
 
+            if (balanceResult.status === 'fulfilled') {
+                nativeSolInfoAsToken.amount = balanceResult.value.toString();
+                nativeSolInfoAsToken.uiAmount = balanceResult.value / LAMPORTS_PER_SOL;
+            } else {
+                console.error('Error fetching balance:', balanceResult.reason);
+                thunkApi.dispatch(addNotificationWithTimeout(
+                    {
+                        notification: {
+                            message: `Failed to fetch Native SOL balance for your wallet`,
+                            type: "error"
+                        },
+                        timeout: 5000
+                    }
+                ));
+            }
 
             // Safely combine the results
             const combinedTokens = [
@@ -71,23 +81,7 @@ export const fetchTokens = createAsyncThunk(
             ];
 
             // Filter out tokens with 0 balance and map to our format
-            const tokens = combinedTokens
-                .filter(accountInfo => {
-                    const amount = accountInfo.account.data.parsed.info.tokenAmount.uiAmount;
-                    return amount !== null && amount > 0;
-                })
-                .map((accountInfo) => {
-                    const info = accountInfo.account.data.parsed.info;
-                    return {
-                        address: accountInfo.pubkey.toBase58(),
-                        mint: info.mint,
-                        decimals: info.tokenAmount.decimals,
-                        amount: info.tokenAmount.amount,
-                        uiAmount: info.tokenAmount.uiAmount,
-                        symbol: 'unknown',
-                        logo: '/unknown-token.svg'
-                    } as Token;
-                });
+            const tokens = combinedTokens.map(processTokenAccount);
 
             // Fetch metadata with retry logic
             const fetchMetadataWithRetry = async (mint: PublicKey, programId: PublicKey): Promise<TokenMetadataResult | null> => {
@@ -113,14 +107,15 @@ export const fetchTokens = createAsyncThunk(
                 const batchPromises = batch.map(async token => {
                     try {
                         const mint = new PublicKey(token.mint);
-                        // Try TOKEN_PROGRAM_ID first, then TOKEN_2022_PROGRAM_ID if the first fails
-                        const metadata = await fetchMetadataWithRetry(mint, TOKEN_PROGRAM_ID) || 
-                                       await fetchMetadataWithRetry(mint, TOKEN_2022_PROGRAM_ID);
+                        if(token.tokenProgram == TokenProgram.NATIVE_SOL) {
+                            return token; // SOL is not a token
+                        }
+                        const programId = token.tokenProgram === TokenProgram.SPL ? TOKEN_PROGRAM_ID : TOKEN_2022_PROGRAM_ID;
+                        const metadata = await fetchMetadataWithRetry(mint, programId);
                         
                         return {
                             ...token,
-                            symbol: metadata?.symbol || token.symbol,
-                            logo: metadata?.uri || token.logo,
+                            symbol: metadata?.symbol,
                             name: metadata?.name
                         };
                     } catch (error) {
@@ -142,7 +137,7 @@ export const fetchTokens = createAsyncThunk(
                 }
             }
 
-            return {tokens: processedTokens, balance: balance};
+            return [nativeSolInfoAsToken, ...processedTokens];
 
         } catch (error) {
             console.error('Error fetching token data:', error);
@@ -166,8 +161,7 @@ const walletSlice = createSlice({
         })
         builder.addCase(fetchTokens.fulfilled, (state, action) => {
             state.loading = false;
-            state.tokens =  action.payload.tokens;
-            state.balance = action.payload.balance;
+            state.tokens =  action.payload;
         })
         builder.addCase(fetchTokens.rejected, (state, action) => {
             state.loading = false;

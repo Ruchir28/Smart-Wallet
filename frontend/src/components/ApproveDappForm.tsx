@@ -11,6 +11,8 @@ import { fetchLatestApprovedDapps } from '../store/smartWalletSlice';
 import { useDispatch } from 'react-redux';
 import { ThunkDispatch } from 'redux-thunk';
 import { addNotificationWithTimeout } from '../store/notificationSlice';
+import TokenSelectModal from './TokenSelectModal';
+
 interface ApproveDappFormProps {
   onSuccess: (txid: string) => void;
   onError: (error: string) => void;
@@ -25,7 +27,6 @@ const ApproveDappForm: React.FC<ApproveDappFormProps> = ({ onSuccess, onError })
 
   const [dappToApprove, setDappToApprove] = useState<string>('');
   const [approvalAmount, setApprovalAmount] = useState<string>('');
-  const [approvalType, setApprovalType] = useState<'SOL' | 'Token'>('SOL');
   const [tokenMint, setTokenMint] = useState<string>('');
   const [expiryDateTime, setExpiryDateTime] = useState<string>(
     DateTime.now().plus({ years: 1 }).toFormat("yyyy-MM-dd'T'HH:mm")
@@ -33,6 +34,12 @@ const ApproveDappForm: React.FC<ApproveDappFormProps> = ({ onSuccess, onError })
   const [isLoading, setIsLoading] = useState(false);
   const dispatch = useDispatch<ThunkDispatch<RootState, any, any>>();
   const userTokens = useSelector((state: RootState) => state.smartWallet.tokens);
+  const [isTokenModalOpen, setIsTokenModalOpen] = useState(false);
+  const tokenMetadata = useSelector((state: RootState) => state.tokenMetadata.metadata);
+  const selectedToken = useMemo(() => 
+    userTokens.find(token => token.mint === tokenMint), 
+    [tokenMint, userTokens]
+  );
 
   const handleApproveDapp = async () => {
     if (!wallet.publicKey || !wallet.signTransaction) {
@@ -44,32 +51,22 @@ const ApproveDappForm: React.FC<ApproveDappFormProps> = ({ onSuccess, onError })
 
     try {
       const dappPublicKey = new PublicKey(dappToApprove);
-      const mintPublicKey = approvalType === 'Token' ? new PublicKey(tokenMint) : PublicKey.default;
       const amount = parseFloat(approvalAmount);
       const expiryTimestamp = DateTime.fromISO(expiryDateTime).toUnixInteger();
 
       let transaction;
 
-      if (approvalType === 'SOL') {
-        transaction = await approveDapp(
-          connection,
-          PROGRAM_ID,
-          wallet.publicKey,
-          dappPublicKey,
-          mintPublicKey,
-          amount,
-          expiryTimestamp,
-          9
-        );
-      } else {
-        const token = userTokens.find(token => token.mint === tokenMint);
+      const mintPublicKey = new PublicKey(tokenMint);
 
-        if (!token) {
-          onError("Token not found in user's tokens");
-          return;
-        }
 
-        transaction = await approveDapp(
+      const token = userTokens.find(token => token.mint === tokenMint);
+
+      if (!token) {
+        onError("Token not found in user's tokens");
+        return;
+      }
+
+      transaction = await approveDapp(
           connection,
           PROGRAM_ID,
           wallet.publicKey,
@@ -79,7 +76,6 @@ const ApproveDappForm: React.FC<ApproveDappFormProps> = ({ onSuccess, onError })
           expiryTimestamp,
           token.decimals
         );
-      }
 
       const signedTx = await wallet.signTransaction(transaction);
       
@@ -167,34 +163,27 @@ const ApproveDappForm: React.FC<ApproveDappFormProps> = ({ onSuccess, onError })
         />
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <select
-          value={approvalType}
-          onChange={(e) => {
-            setApprovalType(e.target.value as 'SOL' | 'Token');
-            if (e.target.value === 'SOL') {
-              setTokenMint('');
-            }
-          }}
-          className="w-full bg-gray-700 bg-opacity-50 text-white px-4 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 border border-gray-600"
+        <button
+          onClick={() => setIsTokenModalOpen(true)}
+          className="w-full bg-gray-700 bg-opacity-50 text-white px-4 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 border border-gray-600 text-left"
         >
-          <option value="SOL">SOL</option>
-          <option value="Token">Token</option>
-        </select>
-        {approvalType === 'Token' && (
-          <select
-            value={tokenMint}
-            onChange={(e) => setTokenMint(e.target.value)}
-            className="w-full bg-gray-700 bg-opacity-50 text-white px-4 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 border border-gray-600"
-          >
-            <option value="">Select a token</option>
-            {userTokens.map((token) => (
-              <option key={token.mint} value={token.mint}>
-                {token.mint} (Balance: {token.uiAmount})
-              </option>
-            ))}
-          </select>
-        )}
+          {selectedToken ? (
+            `${tokenMetadata[selectedToken.mint]?.symbol || selectedToken.mint} (Balance: ${selectedToken.uiAmount})`
+          ) : (
+            'Select a token'
+          )}
+        </button>
       </div>
+      <TokenSelectModal
+        isOpen={isTokenModalOpen}
+        onClose={() => setIsTokenModalOpen(false)}
+        onSelect={(token) => {
+          setTokenMint(token.mint);
+          setIsTokenModalOpen(false);
+        }}
+        title="Select Token"
+        modalType="smartWallet"
+      />
       <div>
         <label htmlFor="expiryDateTime" className="block text-sm font-medium text-gray-400 mb-2">
           Expiry Date and Time

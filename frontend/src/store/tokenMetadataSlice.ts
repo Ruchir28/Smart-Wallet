@@ -3,11 +3,12 @@ import { PublicKey } from '@solana/web3.js';
 import { getTokenMetadata, TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } from '@solana/spl-token';
 import { ConnectionManager } from '../utils/ConnectionManager';
 import { RootState } from './store';
+import { Token, TokenProgram } from './smartWalletSlice';
 
 interface TokenMetadata {
-    image?: string;
+    image: string;
     name?: string;
-    symbol?: string;
+    symbol: string;
     uri?: string;
 }
 
@@ -25,64 +26,62 @@ const initialState: TokenMetadataState = {
 
 export const fetchTokensMetadata = createAsyncThunk(
     'tokenMetadata/fetchTokensMetadata',
-    async (mints: string[], { getState }) => {
+    async (tokens: Token[], { getState }) => {
+        
         const connection = ConnectionManager.getInstance().getConnection();
+        
         const state = getState() as RootState;
+        
         const existingMetadata = state.tokenMetadata.metadata;
         
-        const mintsToFetch = mints.filter(mint => !existingMetadata[mint]);
+        const tokensToFetch = tokens.filter(token => !existingMetadata[token.mint]);
         
-        if (mintsToFetch.length === 0) return {};
+        if (tokensToFetch.length === 0) return {};
 
-        const metadataPromises = mintsToFetch.map(async (mint) => {
+        const metadataPromises = tokensToFetch.map(async (token): Promise<[string, TokenMetadata]> => {
             try {
-                // Try Token-2022 first
-                try {
-                    const token2022Metadata = await getTokenMetadata(
+                const mint = token.mint;
+                const tokenProgram = token.tokenProgram;
+
+                if(tokenProgram == TokenProgram.NATIVE_SOL) {
+                    return [mint, {
+                        symbol: "SOL",
+                        name: "Solana",
+                        image: "/sol.png"
+                    }]
+                }
+
+                const tokenProgramId = tokenProgram == TokenProgram.TOKEN_2022 ? TOKEN_2022_PROGRAM_ID : TOKEN_PROGRAM_ID;
+
+                    const tokenMetadata = await getTokenMetadata(
                         connection,
                         new PublicKey(mint),
                         undefined,
-                        TOKEN_2022_PROGRAM_ID
+                        tokenProgramId
                     );
 
-                    if (token2022Metadata?.uri) {
-                        const response = await fetch(token2022Metadata.uri);
+                    if (tokenMetadata?.uri) {
+                        const response = await fetch(tokenMetadata.uri);
                         const json = await response.json();
                         return [mint, {
                             image: json.image,
                             name: json.name,
-                            symbol: token2022Metadata.symbol,
-                            uri: token2022Metadata.uri
+                            symbol: tokenMetadata.symbol,
+                            uri: tokenMetadata.uri
                         }];
                     }
-                } catch (error) {
-                    console.log(`Token ${mint} not found in Token-2022 program, trying standard Token program...`);
-                }
-
-                // If Token-2022 fails, try standard Token program
-                const tokenMetadata = await getTokenMetadata(
-                    connection,
-                    new PublicKey(mint),
-                    undefined,
-                    TOKEN_PROGRAM_ID
-                );
-
-                if (tokenMetadata?.uri) {
-                    const response = await fetch(tokenMetadata.uri);
-                    const json = await response.json();
                     return [mint, {
-                        image: json.image,
-                        name: json.name,
-                        symbol: tokenMetadata.symbol,
-                        uri: tokenMetadata.uri
+                        symbol: 'Unknown',
+                        image: '/unknown-token.svg'
                     }];
-                }
 
-                return [mint, { symbol: tokenMetadata?.symbol }];
-            } catch (error) {
-                console.error(`Error fetching token metadata for ${mint}:`, error);
-                return [mint, {}];
-            }
+                } catch (error) {
+                    console.error(`Error fetching metadata for token ${token.mint}:`, error);
+                    return [token.mint, {
+                        symbol: 'Unknown',
+                        image: '/unknown-token.svg'
+                    }]
+                }
         });
 
         const metadataResults = await Promise.all(metadataPromises);
