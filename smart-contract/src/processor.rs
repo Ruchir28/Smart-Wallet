@@ -1,9 +1,12 @@
 use solana_program::{
     account_info::{next_account_info, AccountInfo}, clock::Clock, entrypoint::ProgramResult, msg, program::invoke_signed, program_error::ProgramError, pubkey::Pubkey, rent::Rent, system_instruction, sysvar::Sysvar
 };
-
 use crate::{instruction::TransferType, state::{derive_approval_address, derive_wallet_address, pack_approval_data, unpack_approval_data, DAppApproval, DAPP_APPROVAL_SIZE}};
-use spl_token::instruction as token_instruction;
+use solana_program::program_pack::Pack;
+use spl_token::state::Account as SplTokenAccount;
+use spl_token_2022::extension::StateWithExtensions;
+
+
 
 pub fn create_wallet(program_id: &Pubkey, accounts: &[AccountInfo], _instrcution_data: &[u8]) -> ProgramResult {
     let accounts_iter = &mut accounts.iter();
@@ -92,6 +95,122 @@ pub fn approve_dapp(program_id: &Pubkey, accounts: &[AccountInfo], max_amount: u
     Ok(())
 }
 
+fn get_token_balance(token_account: &AccountInfo, token_program: &Pubkey) -> Result<u64, ProgramError> {
+    let data = token_account.try_borrow_data()?;
+    
+    if token_program == &spl_token::id() {
+        let account = SplTokenAccount::unpack(&data)?;
+        Ok(account.amount)
+    } else if token_program == &spl_token_2022::id() {
+        let state = StateWithExtensions::<spl_token_2022::state::Account>::unpack(&data)?;
+        let account = state.base;
+        Ok(account.amount)
+    } else {
+
+        Err(ProgramError::IncorrectProgramId)
+    }
+}
+
+fn create_transfer_instruction(
+    token_program: &Pubkey,
+    source: &Pubkey,
+    destination: &Pubkey,
+    mint: &Pubkey,
+    authority: &Pubkey,
+    amount: u64,
+    decimals: u8,
+) -> Result<solana_program::instruction::Instruction, ProgramError> {
+    if token_program == &spl_token::id() {
+        Ok(spl_token::instruction::transfer_checked(
+            token_program,
+            source,
+            mint,
+            destination,
+            authority,
+            &[],
+            amount,
+            decimals,
+        )?)
+    } else if token_program == &spl_token_2022::id() {
+        Ok(spl_token_2022::instruction::transfer_checked(
+            token_program,
+            source,
+            mint,
+            destination,
+            authority,
+            &[],
+            amount,
+            decimals,
+        )?)
+    } else {
+        Err(ProgramError::IncorrectProgramId)
+    }
+}
+fn get_token_decimals(mint_account: &AccountInfo, token_program: &Pubkey) -> Result<u8, ProgramError> {
+    // Try to borrow data, log error if it fails
+    let data = mint_account.try_borrow_data().map_err(|e| {
+        msg!("Failed to borrow mint account data: {}", e);
+        ProgramError::AccountBorrowFailed
+    })?;
+    
+    msg!("Attempting to get decimals for mint account: {:?}", mint_account.key);
+    
+    if token_program == &spl_token::id() {
+        msg!("Using SPL Token program");
+        let mint = spl_token::state::Mint::unpack(&data).map_err(|e| {
+            msg!("Failed to unpack SPL Token mint data: {}", e);
+            ProgramError::InvalidAccountData
+        })?;
+        msg!("Successfully got decimals: {}", mint.decimals);
+        Ok(mint.decimals)
+    } else if token_program == &spl_token_2022::id() {
+        msg!("Using Token-2022 program");
+        let state = StateWithExtensions::<spl_token_2022::state::Mint>::unpack(&data).map_err(|e| {
+            msg!("Failed to unpack Token-2022 mint data: {}", e);
+            ProgramError::InvalidAccountData
+        })?;
+        let mint = state.base;
+        msg!("Successfully got decimals: {}", mint.decimals);
+        Ok(mint.decimals)
+    } else {
+        msg!("Error: Invalid token program. Expected SPL Token or Token-2022, got: {:?}", token_program);
+        Err(ProgramError::IncorrectProgramId)
+    }
+}
+
+fn validate_token_accounts(
+    wallet_token_account: &AccountInfo,
+    token_mint_account: &AccountInfo,
+    recipient_account: &AccountInfo,
+    token_program: &AccountInfo,
+) -> ProgramResult {
+    // Verify token program
+    if token_program.key != &spl_token::id() && 
+       token_program.key != &spl_token_2022::id() {
+        msg!("Invalid token program");
+        return Err(ProgramError::IncorrectProgramId.into());
+    }
+
+    // Verify source account ownership
+    if wallet_token_account.owner != token_program.key {
+        msg!("Source token account not owned by token program");
+        return Err(ProgramError::InvalidAccountData.into());
+    }
+
+    // Verify mint account ownership
+    if token_mint_account.owner != token_program.key {
+        msg!("Mint account not owned by token program");
+        return Err(ProgramError::InvalidAccountData.into());
+    }
+
+    // Verify destination account ownership
+    if recipient_account.owner != token_program.key {
+        msg!("Destination token account not owned by token program");
+        return Err(ProgramError::InvalidAccountData.into());
+    }
+
+    Ok(())
+}
 
 pub fn execute_transaction(
     program_id: &Pubkey,
@@ -195,35 +314,54 @@ pub fn execute_transaction(
             let wallet_token_account = next_account_info(account_info_iter)?;
             let token_program = next_account_info(account_info_iter)?;
 
-            // Verify the approval is for the correct token
-            if approval_data.token_mint != *token_mint_account.key {
-                return Err(ProgramError::InvalidAccountData.into());
+            // Validate all token accounts
+            validate_token_accounts(
+                wallet_token_account,
+                token_mint_account,
+                recipient_account,
+                token_program,
+            )?;
+
+            // Check token account balance
+            let token_balance = get_token_balance(wallet_token_account, token_program.key)?;
+            if token_balance < amount {
+                msg!("Insufficient token balance");
+                return Err(ProgramError::InsufficientFunds.into());
             }
 
-            // Verify that the associated token account is valid
-            if wallet_token_account.owner != token_program.key {
-                return Err(ProgramError::InvalidAccountData.into());
+            // Get token decimals
+            let decimals = get_token_decimals(token_mint_account, token_program.key)?;
+
+            // Create and execute the transfer instruction
+            let transfer_ix = create_transfer_instruction(
+                token_program.key,
+                wallet_token_account.key,
+                recipient_account.key,
+                token_mint_account.key,
+                wallet_account.key,
+                amount,
+                decimals,
+            )?;
+
+            // For Token-2022, we need to include any extra accounts that might be required
+            let mut accounts = vec![
+                wallet_token_account.clone(),
+                token_mint_account.clone(),
+                recipient_account.clone(),
+                wallet_account.clone(),
+                token_program.clone(),
+            ];
+
+            // Add memo program if using Token-2022 (optional but recommended)
+            if token_program.key == &spl_token_2022::id() {
+                if let Ok(memo_program) = next_account_info(account_info_iter) {
+                    accounts.push(memo_program.clone());
+                }
             }
 
-            msg!("Transferring tokens from wallet_token_account {:?} to recipient_account {:?}, amount: {:?}", wallet_token_account.key, recipient_account.key, amount);
-
-            // Execute the token transfer
             invoke_signed(
-                &spl_token::instruction::transfer(
-                    token_program.key,
-                    wallet_token_account.key,
-                    recipient_account.key,
-                    wallet_account.key,
-                    &[],
-                    amount,
-                )?,
-                &[
-                    wallet_account.clone(),
-                    wallet_token_account.clone(),
-                    recipient_account.clone(),
-                    token_program.clone(),
-                    system_program.clone(),
-                ],
+                &transfer_ix,
+                &accounts,
                 &[&[b"wallet", user_account.key.as_ref(), &[bump_seed]]],
             )?;
 
@@ -255,6 +393,7 @@ pub fn withdraw(program_id: &Pubkey, accounts: &[AccountInfo], amount: u64, tran
 
     // Verify that the provided wallet account is actually the PDA we expect
     if wallet_pda != *wallet_account.key {
+        msg!("Wallet account does not match");
         return Err(ProgramError::InvalidAccountData.into());
     }
 
@@ -276,33 +415,59 @@ pub fn withdraw(program_id: &Pubkey, accounts: &[AccountInfo], amount: u64, tran
             **recipient_account.try_borrow_mut_lamports()? += amount;
         }
         TransferType::Token => {
+            msg!("Withdrawing token");
             let token_mint_account = next_account_info(account_info_iter)?;
             let wallet_token_account = next_account_info(account_info_iter)?;
             let token_program = next_account_info(account_info_iter)?;
 
-            // Verify that the associated token account is valid
-            if wallet_token_account.owner != token_program.key {
-                return Err(ProgramError::InvalidAccountData.into());
+            // Validate accounts
+            validate_token_accounts(
+                wallet_token_account,
+                token_mint_account,
+                recipient_account,
+                token_program,
+            )?;
+
+            msg!("Validated accounts");
+
+            // Get token decimals
+            let decimals = get_token_decimals(token_mint_account, token_program.key)?;
+
+            msg!("Got token decimals: {}", decimals);
+
+            // Check balance
+            let token_balance = get_token_balance(wallet_token_account, token_program.key)?;
+
+            msg!("Got token balance: {}", token_balance);
+
+            if token_balance < amount {
+                msg!("Insufficient token balance");
+                return Err(ProgramError::InsufficientFunds.into());
             }
 
-            msg!("Withdrawing tokens from wallet_token_account {:?} to recipient_account {:?}, amount: {:?}", wallet_token_account.key, recipient_account.key, amount);
+            msg!("Withdrawing tokens from wallet_token_account {:?} to recipient_account {:?}, amount: {:?}", 
+                wallet_token_account.key, recipient_account.key, amount);
 
-            // Execute the token transfer
+            // Create transfer instruction - SPL Token requires specific account order
+            let transfer_ix = create_transfer_instruction(
+                token_program.key,
+                wallet_token_account.key,    // source
+                recipient_account.key,        // destination
+                token_mint_account.key,       // mint
+                wallet_account.key,           // authority
+                amount,
+                decimals,
+            )?;
+
+            // Execute transfer with accounts in SPL Token's required order
             invoke_signed(
-                &spl_token::instruction::transfer(
-                    token_program.key,
-                    wallet_token_account.key,
-                    recipient_account.key,
-                    wallet_account.key,
-                    &[],
-                    amount,
-                )?,
+                &transfer_ix,
                 &[
-                    wallet_account.clone(),
-                    wallet_token_account.clone(),
-                    recipient_account.clone(),
-                    token_program.clone(),
-                    system_program.clone(),
+                    wallet_token_account.clone(),    // source
+                    token_mint_account.clone(),      // mint
+                    recipient_account.clone(),       // destination
+                    wallet_account.clone(),          // authority
+                    token_program.clone(),           // program
                 ],
                 &[&[b"wallet", user_account.key.as_ref(), &[bump_seed]]],
             )?;
@@ -310,6 +475,5 @@ pub fn withdraw(program_id: &Pubkey, accounts: &[AccountInfo], amount: u64, tran
     }
 
     msg!("Withdrawal completed successfully");
-
     Ok(())
 }
