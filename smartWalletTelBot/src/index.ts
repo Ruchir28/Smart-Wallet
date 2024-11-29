@@ -61,8 +61,27 @@ bot.use(session({
   }),
 }));
 
+// Helper function to get command information
+function getCommandInfo(): string {
+  return `🤖 Available Commands:\n
+🚀 /start
+   Start the bot and see available commands\n
+❓ /help
+   Show this help message\n
+💼 /setwallet
+   Select one of your smart wallets to use\n
+💸 /sendsol <amount> <recipient_address>
+   Send SOL to a recipient address\n
+⚠️ Important: Make sure to select a wallet using /setwallet before attempting to send SOL.`;
+}
+
 bot.command("start", async (ctx) => {
-  await ctx.reply("Welcome to the Smart Wallet Telegram Bot! Use /help to see available commands.");
+  const welcomeMessage = "🎉 Welcome to the Smart Wallet Telegram Bot! 👋\n\n" + getCommandInfo();
+  await ctx.reply(welcomeMessage);
+});
+
+bot.command("help", async (ctx) => {
+  await ctx.reply(getCommandInfo());
 });
 
 bot.command("setwallet", async (ctx) => {

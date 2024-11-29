@@ -64,6 +64,14 @@ const SmartWalletInteractions: React.FC = () => {
   const handleCreateWallet = async () => {
     if (!wallet.publicKey) {
       setError("Wallet not connected");
+      // dispatch notfication
+      dispatch(addNotificationWithTimeout({
+        notification: {
+          message: "Please connect your Solana wallet first",
+          type: "error"
+        },
+        timeout: 5000
+      }));
       return;
     }
 
