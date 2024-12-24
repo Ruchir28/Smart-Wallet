@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 
 const LandingPage: React.FC = () => {
     const [text, setText] = useState('');
-    const fullText = "Solana's Smart Wallet";
+    const fullText = "Soul Wallet";
 
     useEffect(() => {
         let index = 0;
@@ -28,7 +28,7 @@ const LandingPage: React.FC = () => {
                     </span>
                 </h1>
                 <p className="text-xl sm:text-2xl md:text-3xl text-gray-300 mb-8">
-                    Secure, Fast, and Intelligent Asset Management
+                    Your AI-Powered Gateway to Web3
                 </p>
                 <div className="flex flex-col sm:flex-row justify-center items-center space-y-4 sm:space-y-0 sm:space-x-4">
                     <Link
@@ -66,6 +66,116 @@ const LandingPage: React.FC = () => {
                         icon="🤖"
                     />
 
+                </div>
+            </div>
+
+            {/* AI Assistant Section */}
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 bg-gray-900 bg-opacity-50 rounded-lg">
+                <h2 className="text-3xl sm:text-4xl font-bold mb-12 text-center">
+                    <span className="bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-green-400">
+                        AI-Powered Asset Management
+                    </span>
+                </h2>
+                
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start">
+                    {/* Built-in AI Assistant Card */}
+                    <div className="bg-gray-800 bg-opacity-50 rounded-xl p-8 backdrop-blur-sm border border-indigo-500/20 shadow-xl">
+                        <div className="flex items-center mb-6">
+                            <span className="text-4xl mr-4">🤖</span>
+                            <h3 className="text-2xl font-semibold text-indigo-400">Built-in AI Assistant</h3>
+                        </div>
+                        <ul className="space-y-4 text-gray-300">
+                            {[
+                                "Natural language interactions for wallet operations",
+                                "Intelligent transaction suggestions and risk assessment",
+                                "Real-time price checks and market insights",
+                                "Automated balance monitoring and alerts",
+                                "Smart portfolio management recommendations"
+                            ].map((feature, index) => (
+                                <li key={index} className="flex items-start group">
+                                    <span className="text-indigo-400 mr-3 transform group-hover:scale-110 transition-transform">→</span>
+                                    <span className="group-hover:text-indigo-300 transition-colors">{feature}</span>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+
+                    {/* Customizable Agent SDK Card */}
+                    <div className="bg-gray-800 bg-opacity-50 rounded-xl p-8 backdrop-blur-sm border border-green-500/20 shadow-xl">
+                        <div className="flex items-center mb-6">
+                            <span className="text-4xl mr-4">⚡</span>
+                            <h3 className="text-2xl font-semibold text-green-400">Customizable Agent SDK</h3>
+                        </div>
+                        <ul className="space-y-4 text-gray-300">
+                            {[
+                                "Create custom AI agents with your own logic",
+                                "Integrate additional tools and capabilities",
+                                "Define custom security rules and constraints",
+                                "Build specialized agents for specific use cases",
+                                "Access comprehensive SDK documentation"
+                            ].map((feature, index) => (
+                                <li key={index} className="flex items-start group">
+                                    <span className="text-green-400 mr-3 transform group-hover:scale-110 transition-transform">→</span>
+                                    <span className="group-hover:text-green-300 transition-colors">{feature}</span>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                </div>
+
+                {/* Preview Window */}
+                <div className="mt-12 bg-black bg-opacity-50 rounded-xl p-6 border border-gray-700">
+                    <div className="flex items-center mb-4">
+                        <div className="flex space-x-2">
+                            <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                            <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+                            <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                        </div>
+                        <div className="ml-4 text-sm text-gray-400">AI Assistant Preview</div>
+                    </div>
+                    <div className="space-y-4">
+                        <div className="flex items-start space-x-3">
+                            <span className="text-gray-400">User:</span>
+                            <div className="bg-gray-800 rounded-lg px-4 py-2 text-white">Check my wallet balance</div>
+                        </div>
+                        <div className="flex items-start space-x-3">
+                            <span className="text-gray-400">AI:</span>
+                            <div className="bg-indigo-900 bg-opacity-50 rounded-lg px-4 py-2 text-white">
+                                I've checked your wallet balance. You currently have 1.5 SOL available.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Add Developer Section */}
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 bg-gray-800 rounded-lg mt-16">
+                <h2 className="text-3xl sm:text-4xl font-bold mb-8 text-center">For Developers</h2>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    <FeatureCard
+                        title="Agent SDK"
+                        description="Build custom AI agents with our comprehensive SDK. Add new capabilities and integrate with your dApp."
+                        icon="🛠️"
+                    />
+                    <FeatureCard
+                        title="Custom Actions"
+                        description="Define custom actions and tools for your AI agents to handle specific use cases and workflows."
+                        icon="⚡"
+                    />
+                    <FeatureCard
+                        title="Easy Integration"
+                        description="Simple integration with existing dApps through our well-documented API and SDK."
+                        icon="🔌"
+                    />
+                </div>
+                <div className="text-center mt-12">
+                    <a
+                        href="#" // Add SDK documentation link when available
+                        className="bg-indigo-600 text-white hover:bg-indigo-700 font-medium py-3 px-8 rounded-md transition duration-300 ease-in-out transform hover:scale-105 text-lg inline-flex items-center"
+                    >
+                        <span>Launching soon</span>
+                        <span className="ml-2">→</span>
+                    </a>
                 </div>
             </div>
 
@@ -110,7 +220,7 @@ const LandingPage: React.FC = () => {
                     </div>
                 </div>
                 <p className="text-lg text-gray-300 mt-8 text-center">
-                    Solana's Smart Wallet revolutionizes dApp interactions by providing a secure, efficient, and user-friendly solution to the challenges of traditional blockchain wallets.
+                    Soul Wallet revolutionizes Web3 interactions by providing a secure, intelligent, and user-friendly solution to the challenges of traditional blockchain wallets.
                 </p>
             </div>
 
@@ -139,8 +249,18 @@ const LandingPage: React.FC = () => {
 
             {/* Benefits Section */}
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 text-center">
-                <h2 className="text-3xl sm:text-4xl font-bold mb-12">Why Choose Solana's Smart Wallet?</h2>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <h2 className="text-3xl sm:text-4xl font-bold mb-12">Why Choose Soul Wallet?</h2>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+                    <FeatureCard
+                        title="AI-Powered"
+                        description="Intelligent assistance for all your wallet operations."
+                        icon="🤖"
+                    />
+                    <FeatureCard
+                        title="Customizable"
+                        description="Build and deploy your own AI agents using our SDK."
+                        icon="🛠️"
+                    />
                     <FeatureCard
                         title="Save Time"
                         description="No more repeated confirmations—approve once and interact seamlessly."
@@ -148,12 +268,12 @@ const LandingPage: React.FC = () => {
                     />
                     <FeatureCard
                         title="Total Control"
-                        description="Control your assets, set limits, and decide who you trust."
+                        description="Control your assets with intelligent oversight."
                         icon="🛡️"
                     />
                     <FeatureCard
                         title="Fully Decentralized"
-                        description="All actions are verifiable on-chain, ensuring security and trust."
+                        description="On-chain verification with AI-enhanced security."
                         icon="🌐"
                     />
                 </div>
@@ -162,13 +282,13 @@ const LandingPage: React.FC = () => {
             {/* Call to Action Section */}
             <div className="text-center py-16 bg-gradient-to-br from-gray-800 to-gray-700 rounded-lg mt-16">
                 <h2 className="text-3xl sm:text-4xl font-bold text-white mb-8">
-                    Ready to take control of your dApp approvals?
+                    Ready to elevate your Web3 experience?
                 </h2>
                 <Link
                     to="/app"
                     className="bg-white text-black hover:bg-gray-200 font-medium py-3 px-8 rounded-md transition duration-300 ease-in-out transform hover:scale-105 text-lg"
                 >
-                    Get Started Now
+                    Launch Soul Wallet
                 </Link>
             </div>
 
@@ -176,7 +296,7 @@ const LandingPage: React.FC = () => {
             <footer className="bg-black bg-opacity-50 backdrop-filter backdrop-blur-lg border-t border-gray-800 mt-16">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                     <p className="text-center text-gray-400">
-                        © 2024 Solana's Smart Wallet. All rights reserved.
+                        © 2024 Soul Wallet. All rights reserved.
                     </p>
                 </div>
             </footer>
