@@ -12,6 +12,7 @@ import { ThunkDispatch } from 'redux-thunk';
 import { addNotificationWithTimeout } from '../store/notificationSlice';
 import { fetchSmartWalletInfo, linkSmartWallet, TelegramUser } from '../store/telegramSlice';
 import TelegramLoginButton from './TelegramLoginButton';
+import { Link } from 'react-router-dom';
 
 declare global {
     interface Window {
@@ -353,7 +354,7 @@ const TelegramBotDemo: React.FC = () => {
         <div className="bg-gray-900 bg-opacity-50 rounded-lg p-8 border border-gray-800 shadow-xl">
             <h2 className="text-2xl font-semibold mb-4 text-white">Telegram Bot Integration</h2>
             <p className="text-gray-300 mb-6">
-                Approve the Telegram bot @smartWallletBot to send SOL on your behalf. This allows you to interact with your Smart Wallet through Telegram without
+                Approve the Telegram bot @smartWallletBot to send SOL on your behalf. This allows you to interact with your Soul Wallet through Telegram without
                 having to sign every transaction.
             </p>
 
@@ -426,6 +427,17 @@ const TelegramBotDemo: React.FC = () => {
                 </div>
             </div>
 
+            <div className="text-center py-16 bg-gradient-to-br from-gray-800 to-gray-700 rounded-lg mt-16">
+                <h2 className="text-3xl sm:text-4xl font-bold text-white mb-8">
+                    Ready to elevate your Web3 experience with Soul Wallet?
+                </h2>
+                <Link
+                    to="/app"
+                    className="bg-white text-black hover:bg-gray-200 font-medium py-3 px-8 rounded-md transition duration-300 ease-in-out transform hover:scale-105 text-lg"
+                >
+                    Launch Soul Wallet
+                </Link>
+            </div>
 
         </div>
     );

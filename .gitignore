@@ -18,3 +18,4 @@ frontend/dist/*
 db/dist/*
 smartWalletTelBot/dist/*
 
+agent-keypair.json

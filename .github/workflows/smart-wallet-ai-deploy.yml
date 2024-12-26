@@ -1,0 +1,82 @@
+name: Deploy Smart Wallet AI
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'smart-wallet-ai/**'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: 'smart-wallet-ai/package-lock.json'
+
+    - name: Install dependencies
+      working-directory: smart-wallet-ai
+      run: npm ci
+
+    - name: Create env file
+      working-directory: smart-wallet-ai
+      run: |
+        echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" > .env
+        echo "PROGRAM_ID=${{ secrets.PROGRAM_ID }}" >> .env
+        echo "RPC_URL=${{ secrets.RPC_URL }}" >> .env
+
+    - name: Create agent keypair file
+      working-directory: smart-wallet-ai
+      run: |
+        echo '${{ secrets.AGENT_KEYPAIR }}' > agent-keypair.json
+
+    - name: Build application
+      working-directory: smart-wallet-ai
+      run: npm run build
+
+    - name: Setup SSH
+      env:
+        SSH_PRIVATE_KEY: ${{ secrets.SERVER_SSH_PRIVATE_KEY }}
+      run: |
+        mkdir -p ~/.ssh
+        echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+    - name: Deploy to server
+      env:
+        SERVER_HOST: ${{ secrets.SERVER_HOST }}
+        SERVER_USER: ${{ secrets.SERVER_USER }}
+        DEPLOY_PATH: /workplace/smart-wallet-ai
+      run: |
+        # Create deployment directory
+        ssh $SERVER_USER@$SERVER_HOST "mkdir -p $DEPLOY_PATH"
+
+        # Copy files
+        scp -r smart-wallet-ai/dist/* $SERVER_USER@$SERVER_HOST:$DEPLOY_PATH/dist/
+        scp smart-wallet-ai/package*.json $SERVER_USER@$SERVER_HOST:$DEPLOY_PATH/
+        scp smart-wallet-ai/.env $SERVER_USER@$SERVER_HOST:$DEPLOY_PATH/
+        scp smart-wallet-ai/agent-keypair.json $SERVER_USER@$SERVER_HOST:$DEPLOY_PATH/
+
+        # Install dependencies and restart service
+        ssh $SERVER_USER@$SERVER_HOST "cd $DEPLOY_PATH && \
+          npm ci --production && \
+          if ! command -v pm2 &> /dev/null; then \
+            npm install -g pm2; \
+          fi && \
+          pm2 restart smart-wallet-ai || pm2 start dist/websocketServer.js --name smart-wallet-ai"
+
+    - name: Clean up
+      working-directory: smart-wallet-ai
+      run: |
+        rm -f .env agent-keypair.json 
+        

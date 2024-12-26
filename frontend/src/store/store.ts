@@ -6,6 +6,7 @@ import notificationReducer from './notificationSlice';
 import {publicKeyListenerMiddleware} from './smartWalletSlice'
 import telegramReducer from './telegramSlice';
 import tokenMetadataReducer from './tokenMetadataSlice';
+import chatReducer from './chatSlice';
 const store = configureStore({
     reducer: {
         connection: connectionReducer,
@@ -14,6 +15,7 @@ const store = configureStore({
         tokenMetadata: tokenMetadataReducer,
         notification: notificationReducer,
         telegram: telegramReducer,
+        chat: chatReducer,
     },
     middleware: (getDefaultMiddleware) =>
         getDefaultMiddleware().prepend(publicKeyListenerMiddleware.middleware, publicKeyListenerMiddlewareWallet.middleware),

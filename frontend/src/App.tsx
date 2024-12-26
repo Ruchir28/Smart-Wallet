@@ -130,7 +130,7 @@ function App() {
                                     <nav className="bg-black bg-opacity-50 backdrop-filter backdrop-blur-lg border-b border-gray-800">
                                         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                                             <div className="flex justify-between items-center h-16">
-                                                <h1 className="text-2xl font-semibold text-white">Smart Wallet</h1>
+                                                <h1 className="text-2xl font-semibold text-white">Soul Wallet</h1>
                                                 <div className="flex items-center">
                                                     <NetworkButton />
                                                     <WalletMultiButton className="bg-white text-black hover:bg-gray-200 font-medium py-2 px-4 rounded-md transition duration-300 ease-in-out transform hover:scale-105" />

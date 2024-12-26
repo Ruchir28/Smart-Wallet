@@ -19,6 +19,7 @@ import TelegramBotDemo from './TelegramBotDemo';
 import { fetchSmartWallet } from '../store/smartWalletSlice';
 import { addNotificationWithTimeout } from '../store/notificationSlice';
 import TokenSelectModal from './TokenSelectModal';
+import AIAssistant from './AIAssistant';
 
 
 
@@ -29,7 +30,7 @@ const SmartWalletInteractions: React.FC = () => {
 
   const [txid, setTxid] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'balance' | 'approve' | 'send' | 'telegram'>('balance');
+  const [activeTab, setActiveTab] = useState<'balance' | 'approve' | 'send' | 'telegram' | 'ai'>('balance');
 
   const [sendAmount, setSendAmount] = useState<string>('');
   const [sendRecipient, setSendRecipient] = useState<string>('');
@@ -375,13 +376,13 @@ const SmartWalletInteractions: React.FC = () => {
     <div className="space-y-8">
       {!hasSmartWallet ? (
         <div className="bg-gray-900 bg-opacity-50 rounded-lg p-8 border border-gray-800 shadow-xl">
-          <h2 className="text-3xl font-semibold mb-4 text-white">Create Your Smart Wallet</h2>
-          <p className="mb-6 text-gray-300">Get started with your own Smart Wallet to manage digital assets securely.</p>
+          <h2 className="text-3xl font-semibold mb-4 text-white">Create Your Soul Wallet</h2>
+          <p className="mb-6 text-gray-300">Get started with your own Soul Wallet to manage digital assets securely.</p>
           <LoadingButton
             onClick={handleCreateWallet}
             isLoading={isCreatingWallet}
-            text="Create Smart Wallet"
-            loadingText="Creating Smart Wallet..."
+            text="Create Soul Wallet"
+            loadingText="Creating Soul Wallet..."
             className="w-full bg-white text-black hover:bg-gray-200 font-medium py-2 px-6 rounded-md transition duration-300 ease-in-out transform hover:scale-105"
           />
         </div>
@@ -410,8 +411,8 @@ const SmartWalletInteractions: React.FC = () => {
             </div>
           )}
           <div className="bg-gray-900 bg-opacity-50 rounded-lg p-8 border border-gray-800 shadow-xl">
-            <h2 className="text-2xl font-semibold mb-4 text-white">Smart Wallet Information</h2>
-            <p className="text-gray-300">Smart Wallet ID: {smartWalletId}</p>
+            <h2 className="text-2xl font-semibold mb-4 text-white">Soul Wallet Information</h2>
+            <p className="text-gray-300">Soul Wallet ID: {smartWalletId}</p>
           </div>
 
           <div className="bg-gray-900 bg-opacity-50 rounded-lg p-4 border border-gray-800 shadow-xl">
@@ -440,6 +441,12 @@ const SmartWalletInteractions: React.FC = () => {
               >
                 Telegram Bot
               </button>
+              <button
+                onClick={() => setActiveTab('ai')}
+                className={`px-4 py-2 rounded-md ${activeTab === 'ai' ? 'bg-white text-black' : 'bg-gray-700 text-white'}`}
+              >
+                AI Assistant
+              </button>
             </div>
           </div>
 
@@ -447,6 +454,7 @@ const SmartWalletInteractions: React.FC = () => {
           {activeTab === 'approve' && renderApproveTab()}
           {activeTab === 'send' && renderSendTab()}
           {activeTab === 'telegram' && renderTelegramTab()}
+          {activeTab === 'ai' && <AIAssistant />}
         </>
       )}
     </div>
